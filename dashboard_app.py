@@ -1,6 +1,6 @@
 """
 Dash可视化界面
-宿舍分配系统的Web界面
+宿舍分配系统的Web界面 - Apple Design风格
 """
 
 import os
@@ -11,6 +11,7 @@ if os.name == 'nt' and 'OMP_NUM_THREADS' not in os.environ:
     os.environ['OMP_NUM_THREADS'] = '2'
 
 import logging
+import re
 import threading
 import uuid
 from datetime import datetime
@@ -56,15 +57,18 @@ class NumpyEncoder(json.JSONEncoder):
         return super(NumpyEncoder, self).default(obj)
 
 
-# 初始化Dash应用
+# 初始化Dash应用 - Apple Design风格
 app = dash.Dash(
     __name__,
     external_stylesheets=[
-        "https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css",
-        "https://codepen.io/chriddyp/pen/bWLwgP.css",
+        dbc.themes.BOOTSTRAP,
+        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css",  # Font Awesome图标
+        "/assets/apple_style.css",  # 引入Apple Design样式
     ],
     suppress_callback_exceptions=True,
     url_base_pathname="/",
+    title="🏠 宿舍分配系统",
+    update_title="🏠 宿舍分配系统 - 正在加载...",
 )
 
 # --- 全局状态和组件 ---
@@ -106,45 +110,100 @@ def initialize_system():
 
 
 # --- 应用布局 ---
-# 样式定义
-SIDEBAR_STYLE = {
-    "position": "fixed",
-    "top": 0,
-    "left": 0,
-    "bottom": 0,
-    "width": "18rem",
-    "padding": "2rem 1rem",
-    "background-color": "#f8f9fa",
-    "border-right": "1px solid #dee2e6",
-}
-
-CONTENT_STYLE = {
-    "margin-left": "20rem",
-    "margin-right": "2rem",
-    "padding": "2rem 1rem",
-}
+# Apple Design样式定义
+# 这些样式现在都在CSS文件中定义，不再需要在Python中定义
 
 
 def create_layout():
-    """创建并返回应用的主布局"""
+    """创建并返回应用的主布局 - Apple Design风格"""
     sidebar = html.Div(
         [
-            html.H2("宿舍分配系统", className="display-4"),
-            html.Hr(),
-            html.P("v1.0", className="lead"),
+            html.Div(
+                [
+                    html.H2(
+                        "🏠 宿舍分配系统", 
+                        className="apple-title",
+                        style={"margin-bottom": "8px"}
+                    ),
+                    html.Div(
+                        "v1.0.0", 
+                        className="apple-version"
+                    ),
+                ],
+                style={"padding": "32px 20px 24px 20px", "border-bottom": "1px solid #E5E5EA"}
+            ),
+            html.Div(
             dbc.Nav(
                 [
-                    dbc.NavLink("📊 数据概览", href="/", active="exact", id="nav-overview"),
-                    dbc.NavLink("🎯 分配优化", href="/optimization", active="exact", id="nav-optimization"),
-                    dbc.NavLink("📋 分配结果", href="/results", active="exact", id="nav-results"),
-                    dbc.NavLink("🔍 决策分析", href="/explanation", active="exact", id="nav-explanation"),
-                    dbc.NavLink("📈 统计分析", href="/statistics", active="exact", id="nav-statistics"),
+                        dbc.NavLink(
+                            [
+                                html.I(className="fas fa-chart-bar", style={"margin-right": "12px", "width": "16px"}),
+                                "数据概览"
+                            ],
+                            href="/", 
+                            active="exact", 
+                            id="nav-overview",
+                            className="nav-link"
+                        ),
+                        dbc.NavLink(
+                            [
+                                html.I(className="fas fa-cogs", style={"margin-right": "12px", "width": "16px"}),
+                                "分配优化"
+                            ],
+                            href="/optimization", 
+                            active="exact", 
+                            id="nav-optimization",
+                            className="nav-link"
+                        ),
+                        dbc.NavLink(
+                            [
+                                html.I(className="fas fa-list-alt", style={"margin-right": "12px", "width": "16px"}),
+                                "分配结果"
+                            ],
+                            href="/results", 
+                            active="exact", 
+                            id="nav-results",
+                            className="nav-link"
+                        ),
+                        dbc.NavLink(
+                            [
+                                html.I(className="fas fa-search", style={"margin-right": "12px", "width": "16px"}),
+                                "决策分析"
+                            ],
+                            href="/explanation", 
+                            active="exact", 
+                            id="nav-explanation",
+                            className="nav-link"
+                        ),
+                        dbc.NavLink(
+                            [
+                                html.I(className="fas fa-chart-line", style={"margin-right": "12px", "width": "16px"}),
+                                "统计分析"
+                            ],
+                            href="/statistics", 
+                            active="exact", 
+                            id="nav-statistics",
+                            className="nav-link"
+                        ),
                 ],
                 vertical=True,
-                pills=True,
+                    pills=False,
+                    style={"padding": "0"}
+                ),
+                style={"padding": "24px"},
+            ),
+            # 系统状态指示器
+            html.Div(
+                id="system-status",
+                style={
+                    "position": "absolute",
+                    "bottom": "24px",
+                    "left": "24px",
+                    "right": "24px",
+                }
             ),
         ],
-        style=SIDEBAR_STYLE,
+        className="apple-sidebar",
     )
 
     # 完整布局
@@ -159,7 +218,10 @@ def create_layout():
             # 侧边栏
             sidebar,
             # 主内容区
-            html.Div(id="page-content", style=CONTENT_STYLE),
+            html.Div(
+                id="page-content", 
+                className="apple-content apple-fade-in"
+            ),
             # 用于触发数据概览页面更新的定时器
             dcc.Interval(id="overview-interval", interval=10 * 1000, disabled=False),
             # 用于触发优化状态更新的定时器
@@ -169,7 +231,8 @@ def create_layout():
                 n_intervals=0,
                 disabled=True,
             ),
-        ]
+        ],
+        style={"fontFamily": "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif"}
     )
 
 
@@ -405,7 +468,7 @@ def create_overview_page():
                     dbc.Col(
                         dbc.Card(
                             [
-                                dbc.CardHeader("学生班级分布 (Top 10)"),
+                                dbc.CardHeader("学生班级分布"),
                                 dbc.CardBody(dcc.Graph(id="overview-class-chart")),
                             ]
                         ),
@@ -419,7 +482,7 @@ def create_overview_page():
                     dbc.Col(
                         dbc.Card(
                             [
-                                dbc.CardHeader("MBTI人格分布 (Top 10)"),
+                                dbc.CardHeader("MBTI人格分布"),
                                 dbc.CardBody(dcc.Graph(id="overview-mbti-chart")),
                             ]
                         ),
@@ -487,130 +550,335 @@ def create_overview_page():
 
 
 def create_optimization_page():
-    """创建并返回分配优化页面的布局"""
+    """创建并返回分配优化页面的布局 - Apple Design风格"""
     return html.Div(
         [
-            html.H3("分配优化设置", className="mb-4"),
-            dbc.Row(
-                [
-                    dbc.Col(
-                        [
-                            html.H5("宿舍容量设置", className="mb-3"),
-                            dbc.InputGroup(
-                                [
-                                    dbc.InputGroupText("6人间男生宿舍数量"),
-                                    dbc.Input(id="male-6-rooms", type="number", value=21, min=0, step=1),
-                                ],
-                                className="mb-3",
-                            ),
-                            dbc.InputGroup(
-                                [
-                                    dbc.InputGroupText("6人间女生宿舍数量"),
-                                    dbc.Input(id="female-6-rooms", type="number", value=30, min=0, step=1),
-                                ],
-                                className="mb-3",
-                            ),
-                            dbc.InputGroup(
-                                [
-                                    dbc.InputGroupText("4人间男生宿舍数量"),
-                                    dbc.Input(id="male-4-rooms", type="number", value=0, min=0, step=1),
-                                ],
-                                className="mb-3",
-                            ),
-                            dbc.InputGroup(
-                                [
-                                    dbc.InputGroupText("4人间女生宿舍数量"),
-                                    dbc.Input(id="female-4-rooms", type="number", value=0, min=0, step=1),
-                                ],
-                                className="mb-3",
-                            ),
-                            html.Div(id="bed-capacity-info", className="mt-3 text-muted"),
-                        ],
-                        md=6,
-                    ),
-                    dbc.Col(
-                        dbc.Card(
-                            [
-                                dbc.CardHeader("遗传算法超参数"),
-                                dbc.CardBody(
-                                    [
-                                        dbc.InputGroup(
-                                            [dbc.InputGroupText("种群大小"), dbc.Input(id="population-size", type="number", value=100, min=20, max=500)],
-                                            className="mb-3",
-                                        ),
-                                        dbc.InputGroup(
-                                            [dbc.InputGroupText("迭代代数"), dbc.Input(id="generations", type="number", value=200, min=50, max=1000)],
-                                            className="mb-3",
-                                        ),
-                                        dbc.InputGroup(
-                                            [dbc.InputGroupText("精英个体数"), dbc.Input(id="elite-size", type="number", value=10, min=1, max=50)],
-                                            className="mb-3",
-                                        ),
-                                        dbc.InputGroup(
-                                            [dbc.InputGroupText("锦标赛大小"), dbc.Input(id="tournament-size", type="number", value=5, min=2, max=20)],
-                                            className="mb-3",
-                                        ),
-                                        dbc.InputGroup(
-                                            [dbc.InputGroupText("变异率"), dbc.Input(id="mutation-rate", type="number", value=0.1, min=0.01, max=0.5, step=0.01)],
-                                            className="mb-3",
-                                        ),
-                                        dbc.InputGroup(
-                                            [dbc.InputGroupText("交叉率"), dbc.Input(id="crossover-rate", type="number", value=0.8, min=0.1, max=1.0, step=0.01)],
-                                            className="mb-3",
-                                        ),
-                                        # 新增：同班优先开关
-                                        html.Div(
-                                            dbc.Switch(
-                                                id="prioritize-class-switch",
-                                                label="优先将同班学生分配在同一宿舍",
-                                                value=False,
-                                            ),
-                                            className="mt-3",
-                                        ),
-                                    ]
-                                ),
-                            ],
-                        ),
-                        md=6,
-                    ),
-                ],
-            ),
+            html.H1("⚙️ 分配优化", className="apple-page-title"),
+            
+            # 第一行：宿舍配置和算法参数
             html.Div(
                 [
-                    html.Button("开始优化", id="start-optimization", className="btn btn-primary btn-lg me-3", n_clicks=0, disabled=False),
-                    html.Button("停止优化", id="stop-optimization", className="btn btn-danger btn-lg", n_clicks=0, disabled=True),
+                    # 宿舍容量设置
+                    html.Div(
+                        [
+                            html.Div("🏠 宿舍容量设置", className="apple-card-header"),
+                            html.Div(
+                                [
+                                    html.Div(
+                                        [
+                                            html.Label("6人间男生宿舍数量", className="apple-input-label"),
+                                            html.Div(
+                                                [
+                                                    html.Div("6人间男生宿舍数量", className="apple-input-group-text"),
+                                                    dcc.Input(
+                                                        id="male-6-rooms", 
+                                                        type="number", 
+                                                        value=21, 
+                                                        min=0, 
+                                                        step=1,
+                                                        className="apple-input"
+                                                    ),
+                                                ],
+                                                className="apple-input-group-horizontal"
+                                            ),
+                                        ],
+                                        className="apple-input-group"
+                                    ),
+                                    html.Div(
+                                        [
+                                            html.Label("6人间女生宿舍数量", className="apple-input-label"),
+                                            html.Div(
+                                                [
+                                                    html.Div("6人间女生宿舍数量", className="apple-input-group-text"),
+                                                    dcc.Input(
+                                                        id="female-6-rooms", 
+                                                        type="number", 
+                                                        value=30, 
+                                                        min=0, 
+                                                        step=1,
+                                                        className="apple-input"
+                                                    ),
+                                                ],
+                                                className="apple-input-group-horizontal"
+                                            ),
+                                        ],
+                                        className="apple-input-group"
+                                    ),
+                                    html.Div(
+                                        [
+                                            html.Label("4人间男生宿舍数量", className="apple-input-label"),
+                                            html.Div(
+                                                [
+                                                    html.Div("4人间男生宿舍数量", className="apple-input-group-text"),
+                                                    dcc.Input(
+                                                        id="male-4-rooms", 
+                                                        type="number", 
+                                                        value=0, 
+                                                        min=0, 
+                                                        step=1,
+                                                        className="apple-input"
+                                                    ),
+                                                ],
+                                                className="apple-input-group-horizontal"
+                                            ),
+                                        ],
+                                        className="apple-input-group"
+                                    ),
+                                    html.Div(
+                                        [
+                                            html.Label("4人间女生宿舍数量", className="apple-input-label"),
+                                            html.Div(
+                                                [
+                                                    html.Div("4人间女生宿舍数量", className="apple-input-group-text"),
+                                                    dcc.Input(
+                                                        id="female-4-rooms", 
+                                                        type="number", 
+                                                        value=0, 
+                                                        min=0, 
+                                                        step=1,
+                                                        className="apple-input"
+                                                    ),
+                                                ],
+                                                className="apple-input-group-horizontal"
+                                            ),
+                                        ],
+                                        className="apple-input-group"
+                                    ),
+                                    html.Div(id="bed-capacity-info", style={"margin-top": "16px", "color": "var(--apple-gray)"}),
+                                ],
+                                className="apple-card-body"
+                            ),
+                        ],
+                        className="apple-card"
+                    ),
+                    
+                    # 遗传算法参数设置
+                    html.Div(
+                        [
+                            html.Div("🧬 遗传算法参数", className="apple-card-header"),
+                            html.Div(
+                                [
+                                    html.Div(
+                                        [
+                                            html.Label("种群大小", className="apple-input-label"),
+                                            html.Div(
+                                                [
+                                                    html.Div("种群大小", className="apple-input-group-text"),
+                                                    dcc.Input(
+                                                        id="population-size", 
+                                                        type="number", 
+                                                        value=100, 
+                                                        min=20, 
+                                                        max=500,
+                                                        className="apple-input"
+                                                    ),
+                                                ],
+                                                className="apple-input-group-horizontal"
+                                            ),
+                                        ],
+                                        className="apple-input-group"
+                                    ),
+                                    html.Div(
+                                        [
+                                            html.Label("迭代代数", className="apple-input-label"),
+                                            html.Div(
+                                                [
+                                                    html.Div("迭代代数", className="apple-input-group-text"),
+                                                    dcc.Input(
+                                                        id="generations", 
+                                                        type="number", 
+                                                        value=200, 
+                                                        min=50, 
+                                                        max=1000,
+                                                        className="apple-input"
+                                                    ),
+                                                ],
+                                                className="apple-input-group-horizontal"
+                                            ),
+                                        ],
+                                        className="apple-input-group"
+                                    ),
+                                        html.Div(
+                                        [
+                                            html.Label("精英个体数", className="apple-input-label"),
+                                            html.Div(
+                                                [
+                                                    html.Div("精英个体数", className="apple-input-group-text"),
+                                                    dcc.Input(
+                                                        id="elite-size", 
+                                                        type="number", 
+                                                        value=10, 
+                                                        min=1, 
+                                                        max=50,
+                                                        className="apple-input"
+                                                    ),
+                                                ],
+                                                className="apple-input-group-horizontal"
+                                            ),
+                                        ],
+                                        className="apple-input-group"
+                                    ),
+                                    html.Div(
+                                        [
+                                            html.Label("锦标赛大小", className="apple-input-label"),
+                                            html.Div(
+                                                [
+                                                    html.Div("锦标赛大小", className="apple-input-group-text"),
+                                                    dcc.Input(
+                                                        id="tournament-size", 
+                                                        type="number", 
+                                                        value=5, 
+                                                        min=2, 
+                                                        max=20,
+                                                        className="apple-input"
+                                                    ),
+                                                ],
+                                                className="apple-input-group-horizontal"
+                                            ),
+                                        ],
+                                        className="apple-input-group"
+                                    ),
+                                    html.Div(
+                                        [
+                                            html.Label("变异率", className="apple-input-label"),
+                                            html.Div(
+                                                [
+                                                    html.Div("变异率", className="apple-input-group-text"),
+                                                    dcc.Input(
+                                                        id="mutation-rate", 
+                                                        type="number", 
+                                                        value=0.1, 
+                                                        min=0.01, 
+                                                        max=0.5, 
+                                                        step=0.01,
+                                                        className="apple-input"
+                                                    ),
+                                                ],
+                                                className="apple-input-group-horizontal"
+                                            ),
+                                        ],
+                                        className="apple-input-group"
+                                    ),
+                                    html.Div(
+                                        [
+                                            html.Label("交叉率", className="apple-input-label"),
+                                            html.Div(
+                                                [
+                                                    html.Div("交叉率", className="apple-input-group-text"),
+                                                    dcc.Input(
+                                                        id="crossover-rate", 
+                                                        type="number", 
+                                                        value=0.8, 
+                                                        min=0.1, 
+                                                        max=1.0, 
+                                                        step=0.01,
+                                                        className="apple-input"
+                                                    ),
+                                                ],
+                                                className="apple-input-group-horizontal"
+                                            ),
+                                        ],
+                                        className="apple-input-group"
+                                    ),
+                                    # 同班优先开关 - 优化设计
+                                    html.Div(
+                                        [
+                                            html.Label("特殊设置", className="apple-input-label"),
+                                            html.Div(
+                                                [
+                                                    dbc.Switch(
+                                                        id="prioritize-class-switch",
+                                                        label="优先将同班学生分配在同一宿舍",
+                                                        value=False,
+                                                    ),
+                                                ],
+                                                className="apple-switch-container"
+                                            ),
+                                        ],
+                                        className="apple-input-group"
+                                    ),
+                            ],
+                                className="apple-card-body"
+                        ),
+                        ],
+                        className="apple-card"
+                    ),
+                ],
+                className="apple-grid apple-grid-2"
+            ),
+            
+            # 控制按钮
+            html.Div(
+                [
+                    html.Button(
+                        [
+                            html.I(className="fas fa-play", style={"margin-right": "8px"}),
+                            "开始优化"
+                        ], 
+                        id="start-optimization", 
+                        className="apple-btn apple-btn-primary", 
+                        n_clicks=0, 
+                        disabled=False,
+                        style={"margin-right": "16px"}
+                    ),
+                    html.Button(
+                        [
+                            html.I(className="fas fa-stop", style={"margin-right": "8px"}),
+                            "停止优化"
+                        ], 
+                        id="stop-optimization", 
+                        className="apple-btn apple-btn-danger", 
+                        n_clicks=0, 
+                        disabled=True
+                    ),
                 ],
                 className="text-center mt-4",
             ),
-            dbc.Card(
+            
+            # 优化状态和进度图表
+            html.Div(
                 [
-                    dbc.CardHeader("优化状态"),
-                    dbc.CardBody(
+                    html.Div(
                         [
-                            html.Div(id="optimization-status", children="系统就绪，等待优化任务..."),
-                            dcc.Graph(id="optimization-progress"),
-                        ]
-                    ),
+                            html.Div("📊 优化进度", className="apple-card-header"),
+                            html.Div(
+                                [
+                                    html.Div(id="optimization-status", children="系统就绪，等待优化任务...", style={"margin-bottom": "24px"}),
+                                    dcc.Graph(
+                                        id="optimization-progress",
+                                        config={'displayModeBar': False}
+                                    ),
+                                ],
+                                className="apple-card-body"
+                            ),
+                        ],
+                        className="apple-card"
+                    )
                 ],
-                className="mt-4",
+                className="apple-grid",
+                style={"margin-top": "32px"}
             ),
         ]
     )
 
 
 def create_results_page():
-    """创建结果页面"""
+    """创建结果页面 - Apple Design风格"""
     return html.Div(
         [
-            html.H1("分配结果", className="mb-4"),
-            html.Div(id="allocation-summary", className="mb-4"),
-            dbc.Card(
+            html.H1("📋 分配结果", className="apple-page-title"),
+            
+            # 分配汇总信息
+            html.Div(id="allocation-summary", style={"margin-bottom": "32px"}),
+            
+            # 分配详情表格
+            html.Div(
                 [
-                    dbc.CardHeader(
-                        dbc.Row(
-                            [
-                                dbc.Col(html.H4("宿舍分配详情", className="card-title mb-0"), width="auto"),
-                                dbc.Col(
+                    html.Div(
+                        [
+                            html.Div(
+                                [
+                                    html.H4("宿舍分配详情", style={"margin": "0", "color": "var(--apple-text-primary)"}),
                                     dcc.Dropdown(
                                         id="results-page-size-dropdown",
                                         options=[
@@ -619,37 +887,72 @@ def create_results_page():
                                             {"label": "50 条/页", "value": 50},
                                             {"label": "100 条/页", "value": 100},
                                         ],
-                                        value=10, # 默认值
+                                        value=10,
                                         clearable=False,
                                         style={"width": "150px"}
                                     ),
-                                    width="auto",
-                                    className="ms-auto" # 靠右对齐
-                                )
-                            ],
-                            align="center",
-                            justify="between"
-                        )
-                    ),
-                    dbc.CardBody(html.Div(id="room-details")),
+                                ],
+                                className="apple-card-header",
+                                style={
+                                    "display": "flex", 
+                                    "justify-content": "space-between", 
+                                    "align-items": "center"
+                                }
+                            ),
+                            html.Div(id="room-details", className="apple-card-body"),
+                        ],
+                        className="apple-card"
+                    )
                 ],
-                className="mb-4",
+                className="apple-grid",
+                style={"margin-bottom": "32px"}
             ),
-            # 新增：宿舍兼容度可视化
-            dbc.Card(
-                [
-                    dbc.CardHeader(html.H4("各宿舍平均兼容度排名", className="card-title mb-0")),
-                    dbc.CardBody(dcc.Graph(id="room-compatibility-barchart"))
-                ],
-                className="mb-4",
-            ),
+            
+            # 宿舍兼容度排名图表
             html.Div(
                 [
-                    html.Button("导出Excel", id="export-excel", className="btn btn-success me-3"),
-                    html.Button("导出PDF报告", id="export-pdf", className="btn btn-info", disabled=True),
+                    html.Div(
+                        [
+                            html.Div("📊 宿舍兼容度排名", className="apple-card-header"),
+                            html.Div(
+                                dcc.Graph(
+                                    id="room-compatibility-barchart",
+                                    config={'displayModeBar': False}
+                                ), 
+                                className="apple-card-body"
+                            ),
+                        ],
+                        className="apple-card"
+                    )
+                ],
+                className="apple-grid",
+                style={"margin-bottom": "32px"}
+            ),
+            
+            # 导出按钮
+            html.Div(
+                [
+                    html.Button(
+                        [
+                            html.I(className="fas fa-download", style={"margin-right": "8px"}),
+                            "导出Excel"
+                        ], 
+                        id="export-excel", 
+                        className="apple-btn apple-btn-primary",
+                        style={"margin-right": "16px"}
+                    ),
+                    html.Button(
+                        [
+                            html.I(className="fas fa-file-pdf", style={"margin-right": "8px"}),
+                            "导出PDF报告"
+                        ], 
+                        id="export-pdf", 
+                        className="apple-btn apple-btn-secondary", 
+                        disabled=True
+                    ),
                     dbc.Tooltip("PDF导出功能正在开发中...", target="export-pdf"),
                 ],
-                className="text-center",
+                style={"text-align": "center"},
             ),
             dcc.Download(id="download-excel"),
         ]
@@ -657,33 +960,113 @@ def create_results_page():
 
 
 def create_explanation_page():
-    """创建解释页面"""
+    """创建解释页面 - Apple Design风格"""
     return html.Div(
         [
-            html.H1("可解释性分析", className="mb-4"),
-            html.Div([html.H4("特征重要性分析", className="card-title"), dcc.Graph(id="feature-importance-plot")], className="card card-body mb-4"),
+            html.H1("🔍 决策分析", className="apple-page-title"),
+            
+            # 特征重要性分析
             html.Div(
                 [
-                    html.H4("宿舍兼容性分析", className="card-title"),
-                    html.Div([
-                        html.Label("选择宿舍:", className="form-label"),
-                        dcc.Dropdown(id="room-selector", options=[], value=None, className="mb-3"),
-                        html.Div(id="room-compatibility-analysis"),
-                    ]),
+                    html.Div(
+                        [
+                            html.Div("🎯 特征重要性分析", className="apple-card-header"),
+                            html.Div(
+                                dcc.Graph(
+                                    id="feature-importance-plot",
+                                    config={'displayModeBar': False}
+                                ), 
+                                className="apple-card-body"
+                            ),
+                        ],
+                        className="apple-card"
+                    )
                 ],
-                className="card card-body mb-4",
+                className="apple-grid",
+                style={"margin-bottom": "32px"}
+            ),
+            
+            # 宿舍兼容性分析
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Div("🏠 宿舍兼容性分析", className="apple-card-header"),
+                            html.Div(
+                                [
+                                    html.Div(
+                                        [
+                                            html.Label("选择宿舍", className="apple-input-label"),
+                                            dcc.Dropdown(
+                                                id="room-selector", 
+                                                options=[], 
+                                                value=None,
+                                                placeholder="请选择要分析的宿舍",
+                                                style={"margin-bottom": "24px"}
+                                            ),
+                                        ],
+                                        className="apple-input-group"
+                                    ),
+                        html.Div(id="room-compatibility-analysis"),
+                                ], 
+                                className="apple-card-body"
+                            ),
+                        ],
+                        className="apple-card"
+                    )
+                ],
+                className="apple-grid"
             ),
         ]
     )
 
 
 def create_statistics_page():
-    """创建统计分析页面"""
+    """创建统计分析页面 - Apple Design风格"""
     return html.Div(
         [
-            html.H1("统计分析", className="mb-4"),
-            html.Div([html.H4("分配质量统计", className="card-title"), dcc.Graph(id="allocation-quality-stats")], className="card card-body mb-4"),
-            html.Div([html.H4("特征相关性分析", className="card-title"), dcc.Graph(id="feature-correlation")], className="card card-body mb-4"),
+            html.H1("📈 统计分析", className="apple-page-title"),
+            
+            # 分配质量统计
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Div("📊 分配质量统计", className="apple-card-header"),
+                            html.Div(
+                                dcc.Graph(
+                                    id="allocation-quality-stats",
+                                    config={'displayModeBar': False}
+                                ), 
+                                className="apple-card-body"
+                            ),
+                        ],
+                        className="apple-card"
+                    )
+                ],
+                className="apple-grid",
+                style={"margin-bottom": "32px"}
+            ),
+            
+            # 特征相关性分析
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Div("🔗 特征相关性分析", className="apple-card-header"),
+                            html.Div(
+                                dcc.Graph(
+                                    id="feature-correlation",
+                                    config={'displayModeBar': False}
+                                ), 
+                                className="apple-card-body"
+                            ),
+                        ],
+                        className="apple-card"
+                    )
+                ],
+                className="apple-grid"
+            ),
         ]
     )
 
@@ -791,9 +1174,9 @@ def control_optimization(
     State("session-id", "data"),
 )
 def update_optimization_status(n, session_id_data):
-    """从会话存储中轮询并更新优化状态UI"""
+    """从会话存储中轮询并更新优化状态UI - Apple Design风格"""
     if not session_id_data or session_id_data["session_id"] not in optimization_threads:
-        return html.P("系统就绪，等待优化任务...", className="text-muted")
+        return html.Div("✨ 系统就绪，等待优化任务", className="apple-status apple-status-success")
 
     status = optimization_threads[session_id_data["session_id"]]
     progress = status.get("progress", 0)
@@ -801,12 +1184,51 @@ def update_optimization_status(n, session_id_data):
 
     if status.get("running", False):
         return html.Div([
-            html.P(f"状态: {message}"),
-            dbc.Progress(value=progress, style={"height": "20px"}),
-            html.P(f"进度: {progress:.1f}%", className="mt-2 text-muted"),
+            html.Div(
+                f"{progress:.1f}%",
+                style={
+                    "font-size": "18px", 
+                    "font-weight": "600", 
+                    "color": "var(--apple-blue)",
+                    "margin-bottom": "8px",
+                    "text-align": "center"
+                }
+            ),
+            html.Div(
+                [
+                    html.Div(
+                        style={
+                            "width": f"{progress}%",
+                            "height": "8px",
+                            "background": "linear-gradient(90deg, var(--apple-blue) 0%, var(--apple-purple) 100%)",
+                            "border-radius": "4px",
+                            "transition": "width 0.3s ease"
+                        }
+                    )
+                ],
+                style={
+                    "width": "100%",
+                    "height": "8px",
+                    "background-color": "var(--apple-light-gray)",
+                    "border-radius": "4px",
+                    "margin-bottom": "12px",
+                    "overflow": "hidden"
+                }
+            ),
+            html.Div(
+                f"🔄 {message}",
+                style={
+                    "font-size": "14px", 
+                    "color": "var(--apple-text-secondary)",
+                    "text-align": "center"
+                }
+            )
         ])
     else:
-        return html.P(f"状态: {message}", className="text-success" if "完成" in message else "text-danger")
+        if "完成" in message:
+            return html.Div(f"✅ {message}", className="apple-status apple-status-success")
+        else:
+            return html.Div(f"⚠️ {message}", className="apple-status apple-status-error")
 
 
 # --- 数据轮询与Store更新回调 ---
@@ -879,24 +1301,171 @@ def update_optimization_progress_chart(progress_data):
     Input("allocation-results-data", "data")
 )
 def update_allocation_summary(results_data):
-    """更新分配结果摘要"""
+    """更新分配结果摘要 - Apple Design风格"""
     try:
         if not results_data or "summary" not in results_data:
-            return html.Div("暂无分配结果，请先进行优化。", className="alert alert-info")
+            return html.Div(
+                [
+                    html.I(className="fas fa-info-circle", style={"margin-right": "8px"}),
+                    "暂无分配结果，请先进行优化。"
+                ], 
+                className="apple-alert apple-alert-info"
+            )
         
         summary = results_data["summary"]
         return html.Div(
             [
-                html.Div(html.Div([html.H4(f"{summary.get('total_students', 'N/A')}", className="card-title text-primary"), html.P("学生总数", className="card-text")], className="card-body text-center"), className="card col-md-3"),
-                html.Div(html.Div([html.H4(f"{summary.get('total_rooms', 'N/A')}", className="card-title text-info"), html.P("宿舍总数", className="card-text")], className="card-body text-center"), className="card col-md-3"),
-                html.Div(html.Div([html.H4(f"{summary.get('fitness', 0):.4f}", className="card-title text-success"), html.P("适应度得分", className="card-text")], className="card-body text-center"), className="card col-md-3"),
-                html.Div(html.Div([html.H4(f"{summary.get('mean_compatibility', 0):.4f}", className="card-title text-secondary"), html.P("平均兼容度", className="card-text")], className="card-body text-center"), className="card col-md-3"),
+                # 学生总数
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.Div("👥 学生总数", className="apple-card-header"),
+                                html.Div(
+                                    [
+                                        html.Div(
+                                            f"{summary.get('total_students', 'N/A')}", 
+                                            style={
+                                                "font-size": "32px", 
+                                                "font-weight": "700", 
+                                                "color": "var(--apple-blue)",
+                                                "text-align": "center"
+                                            }
+                                        ),
+                                        html.Div(
+                                            "已分配学生",
+                                            style={
+                                                "color": "var(--apple-text-secondary)",
+                                                "text-align": "center",
+                                                "margin-top": "8px"
+                                            }
+                                        )
+                                    ],
+                                    className="apple-card-body"
+                                ),
+                            ],
+                            className="apple-card"
+                        )
+                    ],
+                    style={"grid-column": "1"}
+                ),
+                
+                # 宿舍总数
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.Div("🏠 宿舍总数", className="apple-card-header"),
+                                html.Div(
+                                    [
+                                        html.Div(
+                                            f"{summary.get('total_rooms', 'N/A')}", 
+                                            style={
+                                                "font-size": "32px", 
+                                                "font-weight": "700", 
+                                                "color": "var(--apple-green)",
+                                                "text-align": "center"
+                                            }
+                                        ),
+                                        html.Div(
+                                            "已使用宿舍",
+                                            style={
+                                                "color": "var(--apple-text-secondary)",
+                                                "text-align": "center",
+                                                "margin-top": "8px"
+                                            }
+                                        )
+                                    ],
+                                    className="apple-card-body"
+                                ),
+                            ],
+                            className="apple-card"
+                        )
+                    ],
+                    style={"grid-column": "2"}
+                ),
+                
+                # 适应度得分
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.Div("🎯 适应度得分", className="apple-card-header"),
+                                html.Div(
+                                    [
+                                        html.Div(
+                                            f"{summary.get('fitness', 0):.4f}", 
+                                            style={
+                                                "font-size": "32px", 
+                                                "font-weight": "700", 
+                                                "color": "var(--apple-orange)",
+                                                "text-align": "center"
+                                            }
+                                        ),
+                                        html.Div(
+                                            "优化评分",
+                                            style={
+                                                "color": "var(--apple-text-secondary)",
+                                                "text-align": "center",
+                                                "margin-top": "8px"
+                                            }
+                                        )
+                                    ],
+                                    className="apple-card-body"
+                                ),
+                            ],
+                            className="apple-card"
+                        )
+                    ],
+                    style={"grid-column": "3"}
+                ),
+                
+                # 平均兼容度
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.Div("💫 平均兼容度", className="apple-card-header"),
+                                html.Div(
+                                    [
+                                        html.Div(
+                                            f"{summary.get('mean_compatibility', 0):.4f}", 
+                                            style={
+                                                "font-size": "32px", 
+                                                "font-weight": "700", 
+                                                "color": "var(--apple-purple)",
+                                                "text-align": "center"
+                                            }
+                                        ),
+                                        html.Div(
+                                            "兼容性指数",
+                                            style={
+                                                "color": "var(--apple-text-secondary)",
+                                                "text-align": "center",
+                                                "margin-top": "8px"
+                                            }
+                                        )
+                                    ],
+                                    className="apple-card-body"
+                                ),
+                            ],
+                            className="apple-card"
+                        )
+                    ],
+                    style={"grid-column": "4"}
+                ),
             ],
-            className="row",
+            className="apple-grid apple-grid-3",
         )
     except Exception as e:
         logger.error(f"渲染摘要时发生错误: {e}", exc_info=True)
-        return html.Div(f"渲染分配摘要时出错: {e}", className="alert alert-danger")
+        return html.Div(
+            [
+                html.I(className="fas fa-exclamation-triangle", style={"margin-right": "8px"}),
+                f"渲染分配摘要时出错: {e}"
+            ], 
+            className="apple-alert apple-alert-danger"
+        )
 
 
 @app.callback(
@@ -1104,22 +1673,105 @@ def update_statistics_charts(results_data):
 )
 def update_bed_capacity_info(m6, f6, m4, f4):
     if not all(v is not None for v in [m6, f6, m4, f4]):
-        return "请输入所有宿舍数量。"
+        return html.Div([
+            html.Div([
+                html.I(className="fas fa-info-circle", style={"margin-right": "8px", "color": "var(--apple-blue)"}),
+                "请输入所有宿舍数量以查看床位统计"
+            ], style={"color": "var(--apple-gray)", "font-style": "italic"})
+        ])
 
     male_beds = m6 * 6 + m4 * 4
     female_beds = f6 * 6 + f4 * 4
+    total_beds = male_beds + female_beds
     
     male_students = len(student_data[student_data["Sex"] == "男"])
     female_students = len(student_data[student_data["Sex"] == "女"])
+    total_students = male_students + female_students
     
     male_sufficient = male_beds >= male_students
     female_sufficient = female_beds >= female_students
+    overall_sufficient = male_sufficient and female_sufficient
+    
+    # 计算利用率
+    male_utilization = (male_students / male_beds * 100) if male_beds > 0 else 0
+    female_utilization = (female_students / female_beds * 100) if female_beds > 0 else 0
+    overall_utilization = (total_students / total_beds * 100) if total_beds > 0 else 0
     
     return html.Div([
-        html.P(f"男生床位: {male_beds} (需: {male_students})", className="text-success" if male_sufficient else "text-danger"),
-        html.P(f"女生床位: {female_beds} (需: {female_students})", className="text-success" if female_sufficient else "text-danger"),
-        html.P(f"总床位: {male_beds + female_beds} (总学生: {male_students + female_students})"),
-        html.P("✅ 床位充足" if male_sufficient and female_sufficient else "⚠️ 床位不足，请调整！", className="text-success" if male_sufficient and female_sufficient else "text-danger fw-bold")
+        # 床位统计卡片
+        html.Div([
+            html.Div([
+                html.I(className="fas fa-mars", style={"margin-right": "8px", "color": "#1f77b4"}),
+                html.Span("男生床位", style={"font-weight": "600"})
+            ], style={"margin-bottom": "8px"}),
+            html.Div([
+                html.Span(f"{male_beds}", style={"font-size": "24px", "font-weight": "700", "color": "var(--apple-text-primary)"}),
+                html.Span(f" / {male_students}", style={"color": "var(--apple-gray)", "margin-left": "4px"}),
+                html.Span(f" ({male_utilization:.1f}%)", style={"color": "var(--apple-gray)", "font-size": "14px", "margin-left": "8px"})
+            ]),
+            html.Div([
+                html.I(className="fas fa-check-circle" if male_sufficient else "fas fa-exclamation-triangle", 
+                      style={"margin-right": "6px", "color": "#28a745" if male_sufficient else "#dc3545"}),
+                html.Span("充足" if male_sufficient else f"不足 {male_students - male_beds} 个", 
+                         style={"color": "#28a745" if male_sufficient else "#dc3545", "font-size": "14px"})
+            ], style={"margin-top": "4px"})
+        ], className="apple-info-card", style={"margin-bottom": "16px"}),
+        
+        # 女生床位统计
+        html.Div([
+            html.Div([
+                html.I(className="fas fa-venus", style={"margin-right": "8px", "color": "#e377c2"}),
+                html.Span("女生床位", style={"font-weight": "600"})
+            ], style={"margin-bottom": "8px"}),
+            html.Div([
+                html.Span(f"{female_beds}", style={"font-size": "24px", "font-weight": "700", "color": "var(--apple-text-primary)"}),
+                html.Span(f" / {female_students}", style={"color": "var(--apple-gray)", "margin-left": "4px"}),
+                html.Span(f" ({female_utilization:.1f}%)", style={"color": "var(--apple-gray)", "font-size": "14px", "margin-left": "8px"})
+            ]),
+            html.Div([
+                html.I(className="fas fa-check-circle" if female_sufficient else "fas fa-exclamation-triangle", 
+                      style={"margin-right": "6px", "color": "#28a745" if female_sufficient else "#dc3545"}),
+                html.Span("充足" if female_sufficient else f"不足 {female_students - female_beds} 个", 
+                         style={"color": "#28a745" if female_sufficient else "#dc3545", "font-size": "14px"})
+            ], style={"margin-top": "4px"})
+        ], className="apple-info-card", style={"margin-bottom": "16px"}),
+        
+        # 总体统计
+        html.Div([
+            html.Div([
+                html.I(className="fas fa-chart-pie", style={"margin-right": "8px", "color": "var(--apple-blue)"}),
+                html.Span("总体统计", style={"font-weight": "600"})
+            ], style={"margin-bottom": "8px"}),
+            html.Div([
+                html.Span(f"{total_beds}", style={"font-size": "24px", "font-weight": "700", "color": "var(--apple-text-primary)"}),
+                html.Span(f" / {total_students}", style={"color": "var(--apple-gray)", "margin-left": "4px"}),
+                html.Span(f" ({overall_utilization:.1f}%)", style={"color": "var(--apple-gray)", "font-size": "14px", "margin-left": "8px"})
+            ]),
+            html.Div([
+                html.I(className="fas fa-check-circle" if overall_sufficient else "fas fa-exclamation-triangle", 
+                      style={"margin-right": "6px", "color": "#28a745" if overall_sufficient else "#dc3545"}),
+                html.Span("床位配置合理" if overall_sufficient else "需要调整床位配置", 
+                         style={"color": "#28a745" if overall_sufficient else "#dc3545", "font-size": "14px"})
+            ], style={"margin-top": "4px"})
+        ], className="apple-info-card"),
+        
+        # 宿舍类型分布
+        html.Div([
+            html.Div([
+                html.I(className="fas fa-building", style={"margin-right": "8px", "color": "var(--apple-purple)"}),
+                html.Span("宿舍分布", style={"font-weight": "600"})
+            ], style={"margin-bottom": "12px", "margin-top": "20px"}),
+            html.Div([
+                html.Div([
+                    html.Span("6人间", style={"font-weight": "500", "margin-right": "8px"}),
+                    html.Span(f"{m6 + f6} 间", style={"color": "var(--apple-gray)"})
+                ], style={"display": "flex", "justify-content": "space-between", "margin-bottom": "4px"}),
+                html.Div([
+                    html.Span("4人间", style={"font-weight": "500", "margin-right": "8px"}),
+                    html.Span(f"{m4 + f4} 间", style={"color": "var(--apple-gray)"})
+                ], style={"display": "flex", "justify-content": "space-between"})
+            ], style={"font-size": "14px"})
+        ])
     ])
 
 
@@ -1129,12 +1781,17 @@ def update_bed_capacity_info(m6, f6, m4, f4):
 )
 def update_system_status(status_data):
     if not status_data or "student_count" not in status_data:
-        return html.Div([html.P("系统状态:", className="fw-bold"), html.P("❌ 未初始化", className="text-danger")])
+        return html.Div(
+            [
+                html.Div("⚡ 系统状态", style={"font-weight": "600", "margin-bottom": "8px", "color": "var(--apple-text-primary)"}),
+                html.Div("❌ 未初始化", className="apple-status apple-status-error")
+            ]
+        )
     return html.Div([
-        html.P("系统状态:", className="fw-bold"),
-        html.P("✅ 已初始化", className="text-success"),
-        html.P(f"学生数量: {status_data['student_count']}", className="small text-muted"),
-        html.P(f"当前时间: {datetime.now().strftime('%H:%M:%S')}", className="small text-muted"),
+        html.Div("⚡ 系统状态", style={"font-weight": "600", "margin-bottom": "8px", "color": "var(--apple-text-primary)"}),
+        html.Div("✅ 已就绪", className="apple-status apple-status-success"),
+        html.Div(f"📊 学生数量: {status_data['student_count']}", style={"font-size": "12px", "color": "var(--apple-gray)", "margin-top": "8px"}),
+        html.Div(f"🕒 {datetime.now().strftime('%H:%M:%S')}", style={"font-size": "12px", "color": "var(--apple-gray)", "margin-top": "4px"}),
     ])
 
 
@@ -1170,22 +1827,71 @@ def update_overview_charts(n_intervals, system_status):
     )
     fig_gender.update_layout(title_x=0.5)
 
-    # 图2：班级分布条形图
-    class_counts = df["Class"].value_counts().nlargest(10).reset_index()
+    # 图2：班级分布条形图 - 按专业分色，显示所有数据
+    class_counts = df["Class"].value_counts().reset_index()
     class_counts.columns = ["Class", "Count"]
-    fig_class = px.bar(
-        class_counts, x="Class", y="Count", title="学生班级分布 (Top 10)"
-    )
-    fig_class.update_layout(title_x=0.5)
     
-    # 图3：MBTI分布条形图
-    mbti_counts = df["MBTI"].value_counts().nlargest(10).reset_index()
+    # 从班级名称中提取专业信息
+    def extract_major(class_name):
+        """从班级名称中提取专业"""
+        if '食工' in class_name or '食品工程' in class_name:
+            return '食品工程'
+        elif '食品安全' in class_name:
+            return '食品安全'
+        elif '生物工程' in class_name:
+            return '生物工程'
+        elif '包装工程' in class_name:
+            return '包装工程'
+        else:
+            # 尝试提取其他专业模式
+            # 匹配类似 "24专业名1" 的模式
+            match = re.search(r'24([^0-9]+)', class_name)
+            if match:
+                return match.group(1)
+            return '其他专业'
+    
+    class_counts['Major'] = class_counts['Class'].apply(extract_major)
+    
+    # 定义专业配色方案
+    major_colors = {
+        '食品工程': '#FF6B6B',    # 红色
+        '食品安全': '#4ECDC4',    # 青色
+        '生物工程': '#45B7D1',    # 蓝色
+        '包装工程': '#96CEB4',    # 绿色
+        '其他专业': '#FECA57'     # 黄色
+    }
+    
+    fig_class = px.bar(
+        class_counts, 
+        x="Class", 
+        y="Count", 
+        title="学生班级分布 (按专业分色)",
+        color="Major",
+        color_discrete_map=major_colors,
+        labels={"Major": "专业", "Class": "班级", "Count": "人数"}
+    )
+    fig_class.update_layout(
+        title_x=0.5,
+        xaxis_tickangle=-45,
+        height=500
+    )
+    
+    # 图3：MBTI分布条形图 - 显示所有数据
+    mbti_counts = df["MBTI"].value_counts().reset_index()
     mbti_counts.columns = ["MBTI", "Count"]
     fig_mbti = px.bar(
-        mbti_counts, x="MBTI", y="Count", title="MBTI人格分布 (Top 10)",
-        color="MBTI", color_discrete_sequence=px.colors.qualitative.Vivid
+        mbti_counts, 
+        x="MBTI", 
+        y="Count", 
+        title="MBTI人格分布 (完整数据)",
+        color="MBTI", 
+        color_discrete_sequence=px.colors.qualitative.Set3
     )
-    fig_mbti.update_layout(title_x=0.5)
+    fig_mbti.update_layout(
+        title_x=0.5,
+        showlegend=False,  # MBTI类型太多，隐藏图例
+        height=400
+    )
 
     return fig_gender, fig_class, fig_mbti
 
