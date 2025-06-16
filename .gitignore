@@ -1,0 +1,118 @@
+# Python字节码
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 分发/打包
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# 单元测试/覆盖率报告
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# celery节拍计划文件
+celerybeat-schedule
+
+# SageMath解析文件
+*.sage.py
+
+# 环境
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder项目设置
+.spyderproject
+.spyproject
+
+# Rope项目设置
+.ropeproject
+
+# mkdocs文档
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# IDE设置
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 日志文件
+*.log
+
+# 数据库文件
+*.db
+*.sqlite
+*.sqlite3
+
+# 机器学习模型输出
+*.pkl
+*.joblib
+*.h5
+*.onnx
+
+# 临时文件和输出
+temp/
+tmp/
+output/
+results/
+*.tmp
+*.bak
+
+# 大型数据文件（根据需要调整）
+# Data.xlsx (这个文件可能需要保留作为示例，取决于是否包含敏感信息)
+
+# 敏感配置文件
+config.ini
+secrets.yaml
+.env.local
+.env.production 
