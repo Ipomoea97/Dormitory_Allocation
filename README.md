@@ -322,4 +322,9 @@ python -c "from compatibility_model import test_compatibility_model; test_compat
 
 ---
 
+- **版本**: 1.1.0
+- **状态**: 稳定
+
+---
+
 **让AI让宿舍分配更科学，让大学生活更美好！** 🏠✨
