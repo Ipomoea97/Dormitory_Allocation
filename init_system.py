@@ -53,7 +53,7 @@ def initialize_system():
         # 2. 训练兼容性模型
         logger.info("步骤2: 训练兼容性模型")
         model = CompatibilityModel()
-        model.train_model(df, processed_df, preprocessor, n_samples=50000)  # 使用优化后的样本数量
+        model.train_model(df, processed_df, preprocessor, n_samples=1000000)  # 使用优化后的样本数量
 
         # 3. 保存模型和预处理器
         logger.info("步骤3: 保存模型和预处理器")

@@ -43,7 +43,7 @@ class AllocationConfig:
     tournament_size: int = 5  # 锦标赛选择大小
     
     # 奖励与惩罚权重
-    same_class_bonus: float = 0.2  # 同班奖励 (代替惩罚)
+    same_class_bonus: float = 0.5  # 同班奖励 (大幅提高权重以确保班级优先)
     # 不再需要 penalty
     # same_class_penalty: float = 0.1
 
@@ -218,33 +218,74 @@ class AllocationOptimizer:
 
     def _create_initial_individual(self) -> Individual:
         """
-        创建一个满足硬约束的随机初始个体。
-        将所有学生随机分配到匹配其性别的宿舍中，同时遵守容量限制。
+        创建一个满足硬约束的初始个体。
+        如果开启班级优先，则优先将同班学生分配到同一宿舍。
+        否则随机分配。
         """
         allocation = {room['id']: [] for room in self.rooms}
         
         for gender in ["male", "female"]:
             students = self.students_by_gender[gender].copy()
-            random.shuffle(students)
-            
             gender_rooms = [r for r in self.rooms if r['gender'] == gender]
+            
             if not gender_rooms:
                 continue
-
-            student_idx = 0
-            for room in gender_rooms:
-                room_id = room['id']
-                capacity = self.room_capacities[room_id]
+            
+            if self.prioritize_class:
+                # 班级优先模式：按班级分组学生
+                class_groups = {}
+                for student_idx in students:
+                    student_class = self.student_df.loc[student_idx, "Class"]
+                    if student_class not in class_groups:
+                        class_groups[student_class] = []
+                    class_groups[student_class].append(student_idx)
                 
-                # 计算可以放入此宿舍的学生数量
-                num_to_assign = min(capacity, len(students) - student_idx)
+                # 按班级大小排序，优先处理人数多的班级
+                sorted_classes = sorted(class_groups.items(), key=lambda x: len(x[1]), reverse=True)
                 
-                if num_to_assign <= 0:
-                    break
+                room_idx = 0
+                for class_name, class_students in sorted_classes:
+                    random.shuffle(class_students)  # 班级内随机打乱
+                    
+                    student_idx = 0
+                    while student_idx < len(class_students) and room_idx < len(gender_rooms):
+                        room = gender_rooms[room_idx]
+                        room_id = room['id']
+                        capacity = self.room_capacities[room_id]
+                        current_occupancy = len(allocation[room_id])
+                        available_space = capacity - current_occupancy
+                        
+                        if available_space <= 0:
+                            room_idx += 1
+                            continue
+                        
+                        # 尽可能多地将同班学生分配到同一宿舍
+                        num_to_assign = min(available_space, len(class_students) - student_idx)
+                        assigned_students = class_students[student_idx : student_idx + num_to_assign]
+                        allocation[room_id].extend(assigned_students)
+                        student_idx += num_to_assign
+                        
+                        # 如果宿舍满了，移动到下一个宿舍
+                        if len(allocation[room_id]) >= capacity:
+                            room_idx += 1
+            else:
+                # 随机分配模式
+                random.shuffle(students)
+                
+                student_idx = 0
+                for room in gender_rooms:
+                    room_id = room['id']
+                    capacity = self.room_capacities[room_id]
+                    
+                    # 计算可以放入此宿舍的学生数量
+                    num_to_assign = min(capacity, len(students) - student_idx)
+                    
+                    if num_to_assign <= 0:
+                        break
 
-                assigned_students = students[student_idx : student_idx + num_to_assign]
-                allocation[room_id].extend(assigned_students)
-                student_idx += num_to_assign
+                    assigned_students = students[student_idx : student_idx + num_to_assign]
+                    allocation[room_id].extend(assigned_students)
+                    student_idx += num_to_assign
         
         return Individual(allocation)
 
@@ -252,10 +293,15 @@ class AllocationOptimizer:
     def evaluate_fitness(self, individual: Individual) -> float:
         """
         评估个体的适应度
-        适应度 = 平均兼容性得分 + [可选]同班奖励
+        适应度 = 基础兼容性得分 + [可选]班级优先奖励
+        
+        修复说明：
+        1. 移除重复的班级纯度奖励，避免双重计分
+        2. 简化奖励机制，使兼容性得分变化更加敏感
+        3. 确保每一代都有机会产生有意义的适应度变化
         """
         total_compatibility = 0
-        total_bonus = 0
+        class_bonus = 0  # 重命名以明确其作用
         num_pairs = 0
 
         for room_id, students_in_room in individual.allocation.items():
@@ -265,21 +311,44 @@ class AllocationOptimizer:
             gender = self.student_df.loc[students_in_room[0], "Sex"]
             gender_key = "male" if gender == "男" else "female"
             
+            # 计算宿舍内学生对的兼容性
+            room_compatibility = 0
+            room_pairs = 0
+            same_class_pairs = 0  # 记录同班学生对数量
+            
             for s1_idx, s2_idx in combinations(students_in_room, 2):
                 pair_key = tuple(sorted((s1_idx, s2_idx)))
                 
-                total_compatibility += self.compatibility_matrix[gender_key].get(pair_key, 0.5)
+                compatibility = self.compatibility_matrix[gender_key].get(pair_key, 0.5)
+                total_compatibility += compatibility
+                room_compatibility += compatibility
                 num_pairs += 1
+                room_pairs += 1
 
-                # 如果开启了班级优先，则增加奖励分
+                # 检查是否为同班学生对
                 if self.prioritize_class:
                     if self.student_df.loc[s1_idx, "Class"] == self.student_df.loc[s2_idx, "Class"]:
-                        total_bonus += self.config.same_class_bonus
+                        same_class_pairs += 1
+            
+            # 班级优先奖励：基于同班学生对的比例，而不是绝对数量
+            if self.prioritize_class and room_pairs > 0:
+                # 计算该宿舍同班学生对的比例
+                same_class_ratio = same_class_pairs / room_pairs
+                
+                # 根据比例给予渐进式奖励，避免过度奖励
+                # 这样可以让算法在不同的班级混合比例之间进行细致优化
+                if same_class_ratio > 0:
+                    # 奖励强度与同班比例成正比，但不过于强烈
+                    room_class_bonus = same_class_ratio * self.config.same_class_bonus * 0.1
+                    class_bonus += room_class_bonus
         
-        average_compatibility = total_compatibility / num_pairs if num_pairs > 0 else 0
+        # 计算平均兼容性作为基础得分
+        base_fitness = total_compatibility / num_pairs if num_pairs > 0 else 0
         
-        # 将奖励添加到适应度中
-        final_fitness = average_compatibility + total_bonus
+        # 最终适应度 = 基础兼容性 + 班级奖励
+        # 重要：确保基础兼容性仍然是主导因素
+        final_fitness = base_fitness + class_bonus
+        
         individual.fitness = final_fitness
         return final_fitness
 
@@ -319,33 +388,112 @@ class AllocationOptimizer:
 
         return Individual(child1_alloc), Individual(child2_alloc)
 
+    def _targeted_class_mutation(self, allocation: Dict[int, List[int]], gender: str) -> bool:
+        """
+        定向变异：专为"班级优先"模式设计。
+        尝试将一个"落单"的学生和他/她的同班同学安排在一起。
+        返回一个布尔值，指示是否成功执行了定向变异。
+        """
+        # 1. 识别所有"落单"的学生（宿舍里没有同班同学）
+        misplaced_students = []
+        for room_id, students in allocation.items():
+            if not students:
+                continue
+            
+            room_gender = "male" if self.student_df.loc[students[0], "Sex"] == "男" else "female"
+            if room_gender != gender:
+                continue
+
+            class_counts = {}
+            for student_id in students:
+                student_class = self.student_df.loc[student_id, "Class"]
+                class_counts[student_class] = class_counts.get(student_class, 0) + 1
+            
+            for student_id in students:
+                student_class = self.student_df.loc[student_id, "Class"]
+                if class_counts[student_class] == 1: # 这个班的就他一个人
+                    misplaced_students.append((student_id, room_id))
+
+        if not misplaced_students:
+            return False # 没有落单的学生，无法进行此变异
+        
+        random.shuffle(misplaced_students)
+
+        # 2. 尝试为落单学生找到一个"家"
+        for student_id, source_room_id in misplaced_students:
+            student_class = self.student_df.loc[student_id, "Class"]
+            
+            # 3. 寻找一个有该学生同班同学的目标宿舍
+            for target_room_id, target_students in allocation.items():
+                if source_room_id == target_room_id or not target_students:
+                    continue
+                
+                # 确保目标宿舍性别一致
+                target_gender = "male" if self.student_df.loc[target_students[0], "Sex"] == "男" else "female"
+                if target_gender != gender:
+                    continue
+
+                # 检查目标宿舍是否有同班同学
+                has_classmates = any(self.student_df.loc[s, "Class"] == student_class for s in target_students)
+                if not has_classmates:
+                    continue
+
+                # 4. 在目标宿舍中寻找一个可以交换的"非同班"学生
+                swappable_targets = [
+                    s for s in target_students 
+                    if self.student_df.loc[s, "Class"] != student_class
+                ]
+
+                if swappable_targets:
+                    # 找到了一个完美的交换机会
+                    target_student_id = random.choice(swappable_targets)
+                    
+                    # 执行交换
+                    allocation[source_room_id].remove(student_id)
+                    allocation[source_room_id].append(target_student_id)
+                    allocation[target_room_id].remove(target_student_id)
+                    allocation[target_room_id].append(student_id)
+                    
+                    # 成功执行了一次定向变异，立即返回
+                    return True
+        
+        return False # 遍历完所有可能也没找到合适的交换机会
+
+
     def mutate(self, individual: Individual) -> Individual:
         """
-        健壮的变异算子：在两个宿舍间交换一名学生，保证约束。
+        混合变异策略：
+        - 在班级优先模式下，高概率执行"定向变异"，小概率执行"随机变异"。
+        - 在普通模式下，只执行"随机变异"。
         """
         mutated_allocation = {rid: students.copy() for rid, students in individual.allocation.items()}
 
-        if random.random() < self.config.mutation_rate:
-            for gender in ["male", "female"]:
-                # 找到该性别所有有学生的宿舍
-                occupied_rooms = [
-                    r['id'] for r in self.rooms 
-                    if r['gender'] == gender and len(mutated_allocation[r['id']]) > 0
-                ]
-                
-                if len(occupied_rooms) < 2:
-                    continue
+        if random.random() >= self.config.mutation_rate:
+            return Individual(mutated_allocation) # 未达到变异率，不发生变异
 
+        for gender in ["male", "female"]:
+            # 找到该性别所有有学生的宿舍
+            occupied_rooms = [
+                r['id'] for r in self.rooms 
+                if r['gender'] == gender and len(mutated_allocation[r['id']]) > 0
+            ]
+            
+            if len(occupied_rooms) < 2:
+                continue
+
+            # --- 混合变异逻辑 ---
+            mutated = False
+            # 如果是班级优先模式，并且随机数落在定向变异的概率区间
+            if self.prioritize_class and random.random() < 0.7: # 70% 概率尝试定向变异
+                mutated = self._targeted_class_mutation(mutated_allocation, gender)
+
+            # 如果定向变异没有执行，或者是非班级优先模式，则执行随机变异
+            if not mutated:
                 # 随机选择两个不同的宿舍
                 room1_id, room2_id = random.sample(occupied_rooms, 2)
                 
-                # 确保两个宿舍容量不超限的情况下可以交换
-                room1_cap = self.room_capacities[room1_id]
-                room2_cap = self.room_capacities[room2_id]
-                
-                # 如果两个宿舍都已满员，则可以安全地交换学生
-                if len(mutated_allocation[room1_id]) == room1_cap and len(mutated_allocation[room2_id]) == room2_cap:
-                    # 从每个宿舍随机选择一名学生
+                # 如果两个宿舍都有学生，则可以进行交换
+                if len(mutated_allocation[room1_id]) > 0 and len(mutated_allocation[room2_id]) > 0:
                     student1 = random.choice(mutated_allocation[room1_id])
                     student2 = random.choice(mutated_allocation[room2_id])
                     
@@ -361,6 +509,11 @@ class AllocationOptimizer:
     def run(self, progress_callback=None) -> Tuple[List[Individual], Individual]:
         """
         运行遗传算法，对所有学生进行优化。
+        
+        优化说明：
+        1. 增加适应度变化的记录频率
+        2. 改善进展报告机制
+        3. 确保每一代都有机会展示变化
         """
         logger.info("开始遗传算法优化...")
         
@@ -372,6 +525,7 @@ class AllocationOptimizer:
             ind.fitness = fitness
 
         best_individual = max(population, key=lambda ind: ind.fitness)
+        previous_best_fitness = best_individual.fitness
 
         for generation in tqdm(range(self.config.generations), desc="遗传算法优化进度"):
             # 2. 选择 - 精英直接进入下一代
@@ -399,17 +553,33 @@ class AllocationOptimizer:
             # 5. 组成新一代种群
             population = elites + offspring
 
-            # 6. 更新全局最优解
+            # 6. 更新全局最优解并报告进展
             current_best_in_gen = max(population, key=lambda ind: ind.fitness)
-            if current_best_in_gen.fitness > best_individual.fitness:
+            current_best_fitness = current_best_in_gen.fitness
+            
+            # 如果发现更好的解，更新最佳个体
+            if current_best_fitness > best_individual.fitness:
                 best_individual = current_best_in_gen
+                progress_message = f"发现更优解! 适应度提升至 {current_best_fitness:.6f}"
+            else:
+                # 即使没有找到更好的解，也报告当前状态
+                # 这有助于用户了解算法仍在运行
+                fitness_diff = current_best_fitness - previous_best_fitness
+                if abs(fitness_diff) > 1e-8:  # 有微小变化
+                    progress_message = f"种群进化中... 当前最佳: {current_best_fitness:.6f} (变化: {fitness_diff:+.6f})"
+                else:
+                    progress_message = f"稳定搜索中... 当前最佳: {current_best_fitness:.6f}"
 
+            # 无论是否有改进，都调用进度回调
             if progress_callback:
                 progress_callback(
                     generation + 1,
-                    best_individual.fitness,
-                    "优化进行中...",
+                    best_individual.fitness,  # 始终报告历史最佳适应度
+                    progress_message,
                 )
+            
+            # 更新前一代最佳适应度，用于下次比较
+            previous_best_fitness = current_best_fitness
             
             time.sleep(0.01)
 
@@ -431,7 +601,7 @@ class AllocationOptimizer:
                 for student_id in student_ids:
                     student_info = self.student_df.loc[student_id]
                     allocations.append({
-                        "StudentID": student_id,
+                        "StudentID": student_info["StudentID"],  # 使用真实的StudentID
                         "Name": student_info["Name"],
                         "Sex": student_info["Sex"],
                         "Class": student_info["Class"],
@@ -453,8 +623,7 @@ def main():
     # 1. 加载和准备数据/模型
     try:
         student_df = pd.read_excel("Data.xlsx")
-        # 为保证测试稳定性，重置索引
-        student_df.reset_index(drop=True, inplace=True)
+        # 保持数字索引，与主系统保持一致
         preprocessor = DataPreprocessor().fit(student_df)
         model = CompatibilityModel.load_model("compatibility_model")
     except FileNotFoundError as e:

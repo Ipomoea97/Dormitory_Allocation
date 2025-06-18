@@ -1,6 +1,5 @@
 """
-Dash可视化界面
-宿舍分配系统的Web界面 - Apple Design风格
+宿舍分配系统Web界面
 """
 
 import os
@@ -89,6 +88,8 @@ def initialize_system():
     try:
         logger.info("初始化系统组件...")
         student_data = pd.read_excel("Data.xlsx")
+        # 保存原始StudentID列，但不设置为索引，以避免索引错误
+        # 系统内部使用数字索引，显示时使用StudentID
         logger.info(f"成功加载学生数据: {len(student_data)} 名学生")
 
         logger.info("正在拟合数据预处理器...")
@@ -120,10 +121,52 @@ def create_layout():
         [
             html.Div(
                 [
-                    html.H2(
-                        "🏠 宿舍分配系统", 
-                        className="apple-title",
-                        style={"margin-bottom": "8px"}
+                    html.Div(
+                        [
+                            html.Img(
+                                src="/assets/SCAU_LOGO.png", 
+                                style={
+                                    "height": "36px", 
+                                    "width": "36px", 
+                                    "margin-right": "8px",
+                                    "flex-shrink": "0"
+                                }
+                            ),
+                            html.Div(
+                                [
+                                    html.Div(
+                                        "华南农业大学食品学院", 
+                                        style={
+                                            "font-size": "18px",
+                                            "font-weight": "700",
+                                            "line-height": "1.2",
+                                            "background": "linear-gradient(135deg, var(--apple-blue) 0%, var(--apple-purple) 100%)",
+                                            "-webkit-background-clip": "text",
+                                            "-webkit-text-fill-color": "transparent",
+                                            "background-clip": "text",
+                                            "margin": "0"
+                                        }
+                                    ),
+                                    html.Div(
+                                        "宿舍分配系统", 
+                                        style={
+                                            "font-size": "18px",
+                                            "font-weight": "600",
+                                            "line-height": "1.2",
+                                            "color": "var(--apple-text-secondary)",
+                                            "margin": "0"
+                                        }
+                                    ),
+                                ],
+                                style={"flex": "1", "min-width": "0"}
+                            ),
+                        ],
+                        style={
+                            "display": "flex", 
+                            "align-items": "center",
+                            "width": "100%",
+                            "overflow": "hidden"
+                        }
                     ),
                     html.Div(
                         "v1.0.0", 
@@ -293,43 +336,45 @@ def start_optimization_thread(
     crossover_rate,
     prioritize_class,
 ):
-    """在后台线程中启动和管理优化过程"""
-
-    # 在主线程中立即创建初始状态，确保UI可以即时响应
+    """启动优化线程，根据给定的参数运行遗传算法"""
+    
+    # 初始化或重置会话状态，清理旧结果
     optimization_threads[session_id] = {
-        "thread": None,  # 将存储线程对象
         "running": True,
-        "stop_requested": False,
         "progress": 0,
-        "message": "正在准备优化...",
-        "results": None,
-        "progress_data": {"generations": [], "fitness_values": []},  # 初始化进度数据
+        "message": "正在初始化优化器...",
+        "progress_data": {"generations": [], "fitness_values": []},  # 初始化为正确的字典结构
+        "results": None,  # 确保清空旧结果
+        "stop_requested": False,
     }
     logger.info(f"为会话 {session_id} 初始化优化状态。")
 
     def optimize():
-        """优化执行函数，在线程内运行"""
-
-        def progress_callback(generation, fitness, message):
-            """用于从优化器内部更新进度的回调"""
-            if optimization_threads[session_id].get("stop_requested"):
-                raise InterruptedError("用户中断了优化。")
-
-            current_status = optimization_threads.get(session_id, {})
-            # 计算进度百分比
-            progress = (generation / generations) * 100 if generations > 0 else 0
-            current_status["progress"] = progress
-            current_status["message"] = (
-                f"代: {generation}/{generations} - 适应度: {fitness:.4f} - {message}"
-            )
-            
-            # 记录详细进度用于绘图
-            current_status["progress_data"]["generations"].append(generation)
-            current_status["progress_data"]["fitness_values"].append(fitness)
-
-
+        """优化的核心逻辑，在独立线程中运行"""
         try:
+            # 进度回调函数
+            def progress_callback(generation, fitness, message):
+                if session_id in optimization_threads:
+                    status = optimization_threads[session_id]
+                    if status.get("stop_requested", False):
+                        raise InterruptedError("用户请求停止优化")
+                        
+                    status["progress"] = (generation / generations) * 95  # 为后处理留5%
+                    status["message"] = f"第{generation}代, 最佳适应度: {fitness:.4f}"
+                    
+                    # 更新进度数据用于图表显示
+                    progress_data = status.get("progress_data")
+                    if progress_data is None:
+                        progress_data = {"generations": [], "fitness_values": []}
+                        status["progress_data"] = progress_data
+                    
+                    progress_data["generations"].append(generation)
+                    progress_data["fitness_values"].append(fitness)
+
             logger.info(f"会话 {session_id}: 开始优化...")
+            
+            # 更新状态
+            optimization_threads[session_id]["message"] = "初始化优化器..."
             
             # 创建配置对象
             config = AllocationConfig(
@@ -390,14 +435,50 @@ def start_optimization_thread(
                     # 兼容直接返回数值（如 int, float, numpy.float32）的情况
                     fitness_value = best_solution.fitness
 
+                # 计算额外的统计指标
+                allocation_df = pd.DataFrame(results_df.to_dict("records"))
+                
+                # 计算最大兼容度
+                max_compatibility = 0
+                if allocation_metrics.get("compatibilities"):
+                    max_compatibility = max(allocation_metrics["compatibilities"])
+                
+                # 计算性别平衡度
+                gender_balance_scores = []
+                for room_id, group in allocation_df.groupby("RoomID"):
+                    room_students = group["StudentID"].tolist()
+                    genders = []
+                    for sid in room_students:
+                        student_row = student_data[student_data["StudentID"] == sid]
+                        if not student_row.empty:
+                            genders.append(student_row.iloc[0]["Sex"])
+                    
+                    if genders:
+                        male_count = genders.count("男")
+                        female_count = genders.count("女")
+                        total = len(genders)
+                        balance_score = 1 - abs(male_count - female_count) / total if total > 0 else 0
+                        gender_balance_scores.append(balance_score)
+                
+                avg_gender_balance = np.mean(gender_balance_scores) if gender_balance_scores else 0.5
+                
+                # 计算分配覆盖率
+                total_students_in_data = len(student_data)
+                allocated_students = len(allocation_df)
+                coverage_rate = allocated_students / total_students_in_data if total_students_in_data > 0 else 0
+
                 results_data = {
                     "summary": {
                         "total_students": len(results_df),
                         "total_rooms": results_df["RoomID"].nunique(),
                         "fitness": fitness_value,
                         "mean_compatibility": allocation_metrics.get("mean_compatibility", 0),
+                        "max_compatibility": max_compatibility,
+                        "gender_balance": avg_gender_balance,
+                        "coverage_rate": coverage_rate,
                     },
                     "details": results_df.to_dict("records"),
+                    "allocation": allocation_df.to_dict("records"),
                     "explanation": {
                         "feature_importance": feature_importance_df.to_dict("records"),
                         "metrics": allocation_metrics,
@@ -524,8 +605,17 @@ def create_overview_page():
                                     dash_table.DataTable(
                                         id="student-data-table",
                                         columns=[
-                                            {"name": i, "id": i}
-                                            for i in student_data.columns
+                                            {"name": "学号", "id": "StudentID"},
+                                            {"name": "姓名", "id": "Name"},
+                                            {"name": "班级", "id": "Class"},
+                                            {"name": "性别", "id": "Sex"},
+                                            {"name": "年龄", "id": "Age"},
+                                            {"name": "省份", "id": "Province"},
+                                            {"name": "高考分数", "id": "Gaokao"},
+                                            {"name": "类型", "id": "Type"},
+                                            {"name": "MBTI", "id": "MBTI"},
+                                            {"name": "睡觉时间", "id": "Sleep"},
+                                            {"name": "兴趣爱好", "id": "Hobby"},
                                         ],
                                         data=student_data.to_dict("records"),
                                         page_size=10,
@@ -553,7 +643,7 @@ def create_optimization_page():
     """创建并返回分配优化页面的布局 - Apple Design风格"""
     return html.Div(
         [
-            html.H1("⚙️ 分配优化", className="apple-page-title"),
+            html.H1("⚙️ 分配系统", className="apple-page-title"),
             
             # 第一行：宿舍配置和算法参数
             html.Div(
@@ -780,7 +870,7 @@ def create_optimization_page():
                                         ],
                                         className="apple-input-group"
                                     ),
-                                    # 同班优先开关 - 优化设计
+                                    # 同班优先开关 - 修复布局问题
                                     html.Div(
                                         [
                                             html.Label("特殊设置", className="apple-input-label"),
@@ -790,12 +880,15 @@ def create_optimization_page():
                                                         id="prioritize-class-switch",
                                                         label="优先将同班学生分配在同一宿舍",
                                                         value=False,
+                                                        style={"margin-left": "8px"}
                                                     ),
                                                 ],
-                                                className="apple-switch-container"
+                                                className="apple-switch-container",
+                                                style={"padding-left": "8px", "margin-top": "8px"}
                                             ),
                                         ],
-                                        className="apple-input-group"
+                                        className="apple-input-group",
+                                        style={"margin-top": "16px"}
                                     ),
                             ],
                                 className="apple-card-body"
@@ -813,7 +906,7 @@ def create_optimization_page():
                     html.Button(
                         [
                             html.I(className="fas fa-play", style={"margin-right": "8px"}),
-                            "开始优化"
+                            "开始分配"
                         ], 
                         id="start-optimization", 
                         className="apple-btn apple-btn-primary", 
@@ -824,7 +917,7 @@ def create_optimization_page():
                     html.Button(
                         [
                             html.I(className="fas fa-stop", style={"margin-right": "8px"}),
-                            "停止优化"
+                            "停止分配"
                         ], 
                         id="stop-optimization", 
                         className="apple-btn apple-btn-danger", 
@@ -840,10 +933,10 @@ def create_optimization_page():
                 [
                     html.Div(
                         [
-                            html.Div("📊 优化进度", className="apple-card-header"),
+                            html.Div("📊 分配进度", className="apple-card-header"),
                             html.Div(
                                 [
-                                    html.Div(id="optimization-status", children="系统就绪，等待优化任务...", style={"margin-bottom": "24px"}),
+                                    html.Div(id="optimization-status", children="系统就绪，等待分配任务...", style={"margin-bottom": "24px"}),
                                     dcc.Graph(
                                         id="optimization-progress",
                                         config={'displayModeBar': False}
@@ -1027,7 +1120,7 @@ def create_statistics_page():
         [
             html.H1("📈 统计分析", className="apple-page-title"),
             
-            # 分配质量统计
+            # 第一行：分配质量统计和MBTI多样性
             html.Div(
                 [
                     html.Div(
@@ -1041,19 +1134,47 @@ def create_statistics_page():
                                 className="apple-card-body"
                             ),
                         ],
-                        className="apple-card"
+                        className="apple-card",
+                        style={"width": "48%", "display": "inline-block", "margin-right": "4%"}
+                    ),
+                    html.Div(
+                        [
+                            html.Div("🧠 宿舍MBTI多样性", className="apple-card-header"),
+                            html.Div(
+                                dcc.Graph(
+                                    id="mbti-diversity-chart",
+                                    config={'displayModeBar': False}
+                                ), 
+                                className="apple-card-body"
+                            ),
+                        ],
+                        className="apple-card",
+                        style={"width": "48%", "display": "inline-block"}
                     )
                 ],
-                className="apple-grid",
                 style={"margin-bottom": "32px"}
             ),
             
-            # 特征相关性分析
+            # 第二行：地域分布和特征相关性
             html.Div(
                 [
                     html.Div(
                         [
-                            html.Div("🔗 特征相关性分析", className="apple-card-header"),
+                            html.Div("🌍 地域分布分析", className="apple-card-header"),
+                            html.Div(
+                                dcc.Graph(
+                                    id="province-distribution",
+                                    config={'displayModeBar': False}
+                                ), 
+                                className="apple-card-body"
+                            ),
+                        ],
+                        className="apple-card",
+                        style={"width": "48%", "display": "inline-block", "margin-right": "4%"}
+                    ),
+                    html.Div(
+                        [
+                            html.Div("🔗 学生特征相关性", className="apple-card-header"),
                             html.Div(
                                 dcc.Graph(
                                     id="feature-correlation",
@@ -1062,10 +1183,10 @@ def create_statistics_page():
                                 className="apple-card-body"
                             ),
                         ],
-                        className="apple-card"
+                        className="apple-card",
+                        style={"width": "48%", "display": "inline-block"}
                     )
-                ],
-                className="apple-grid"
+                ]
             ),
         ]
     )
@@ -1135,7 +1256,7 @@ def control_optimization(
     # --- 处理按钮点击 ---
     clear_data = dash.no_update
     if triggered_id == "start-optimization" and start_clicks > 0:
-        logger.info(f"[{session_id}] 收到启动优化请求。")
+        logger.info(f"[{session_id}] 收到启动分配请求。")
         # 仅当没有线程在运行时才启动
         if not optimization_threads.get(session_id, {}).get("running", False):
             start_optimization_thread(
@@ -1144,10 +1265,10 @@ def control_optimization(
             clear_data = True
     
     elif triggered_id == "stop-optimization" and stop_clicks > 0:
-        logger.info(f"[{session_id}] 收到停止优化请求。")
+        logger.info(f"[{session_id}] 收到停止分配请求。")
         if session_id in optimization_threads:
             optimization_threads[session_id]["stop_requested"] = True
-            optimization_threads[session_id]["message"] = "正在停止优化..."
+            optimization_threads[session_id]["message"] = "正在停止分配..."
 
     # --- 根据线程状态更新UI ---
     is_running = optimization_threads.get(session_id, {}).get("running", False)
@@ -1176,7 +1297,7 @@ def control_optimization(
 def update_optimization_status(n, session_id_data):
     """从会话存储中轮询并更新优化状态UI - Apple Design风格"""
     if not session_id_data or session_id_data["session_id"] not in optimization_threads:
-        return html.Div("✨ 系统就绪，等待优化任务", className="apple-status apple-status-success")
+        return html.Div("✨ 系统就绪，等待分配任务", className="apple-status apple-status-success")
 
     status = optimization_threads[session_id_data["session_id"]]
     progress = status.get("progress", 0)
@@ -1258,8 +1379,9 @@ def update_results_data_from_thread(n, session_id_data):
         # 修正：采用更健壮的 get/set-None 模式代替 pop
         if not status.get("running") and status.get("results"):
             results = status["results"]
-            status["results"] = None  # 清空，防止重复发送
-            logger.info(f"[{session_id_data['session_id']}] 成功从线程获取优化结果并发送至前端。")
+            # 不清空results，允许重复显示，直到新的优化开始
+            # status["results"] = None  # 清空，防止重复发送
+            logger.info(f"[{session_id_data['session_id']}] 成功从线程获取分配结果并发送至前端。")
             return results
     return dash.no_update
 
@@ -1272,7 +1394,7 @@ def update_results_data_from_thread(n, session_id_data):
 def update_optimization_progress_chart(progress_data):
     """根据Store中的数据更新优化进度图表"""
     if not progress_data or not progress_data.get("generations"):
-        return go.Figure().update_layout(title="优化进度", template="plotly_white", height=400)
+        return go.Figure().update_layout(title="分配进度", template="plotly_white", height=400)
     
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -1292,7 +1414,7 @@ def update_optimization_progress_chart(progress_data):
             annotation_position="bottom right"
         )
     
-    fig.update_layout(title="优化进度 - 适应度变化", xaxis_title="迭代代数", yaxis_title="适应度得分", template="plotly_white", height=400)
+    fig.update_layout(title="分配进度 - 适应度变化", xaxis_title="迭代代数", yaxis_title="适应度得分", template="plotly_white", height=400)
     return fig
 
 
@@ -1307,7 +1429,7 @@ def update_allocation_summary(results_data):
             return html.Div(
                 [
                     html.I(className="fas fa-info-circle", style={"margin-right": "8px"}),
-                    "暂无分配结果，请先进行优化。"
+                    "暂无分配结果，请先进行分配。"
                 ], 
                 className="apple-alert apple-alert-info"
             )
@@ -1403,7 +1525,7 @@ def update_allocation_summary(results_data):
                                             }
                                         ),
                                         html.Div(
-                                            "优化评分",
+                                            "分配评分",
                                             style={
                                                 "color": "var(--apple-text-secondary)",
                                                 "text-align": "center",
@@ -1476,14 +1598,44 @@ def update_allocation_summary(results_data):
 def update_room_details(results_data, page_size):
     """更新宿舍的分配详情"""
     try:
-        if not results_data or "details" not in results_data:
-            return html.Div("暂无详细分配数据，请先完成优化。", className="alert alert-info")
+        # 添加详细的调试信息
+        if not results_data:
+            logger.info("room-details回调: results_data为空")
+            return html.Div(
+                [
+                    html.I(className="fas fa-info-circle", style={"margin-right": "8px"}),
+                    "暂无详细分配数据，请先完成分配。"
+                ], 
+                className="apple-alert apple-alert-info"
+            )
+        
+        logger.info(f"room-details回调: results_data键: {list(results_data.keys()) if isinstance(results_data, dict) else '非字典类型'}")
+        
+        if "details" not in results_data:
+            logger.warning("room-details回调: results_data中没有'details'键")
+            return html.Div(
+                [
+                    html.I(className="fas fa-exclamation-triangle", style={"margin-right": "8px"}),
+                    "分配数据格式错误，缺少详细信息。"
+                ], 
+                className="apple-alert apple-alert-warning"
+            )
 
         allocation_details = results_data["details"]
         if not allocation_details:
-            return html.Div("分配详情为空。", className="alert alert-warning")
+            logger.warning("room-details回调: allocation_details为空")
+            return html.Div(
+                [
+                    html.I(className="fas fa-exclamation-triangle", style={"margin-right": "8px"}),
+                    "分配详情为空。"
+                ], 
+                className="apple-alert apple-alert-warning"
+            )
 
+        logger.info(f"room-details回调: 分配详情数量: {len(allocation_details)}")
+        
         df = pd.DataFrame(allocation_details)
+        logger.info(f"room-details回调: DataFrame形状: {df.shape}, 列: {df.columns.tolist()}")
         
         # 创建表格的函数
         def create_data_table(dataframe, table_id):
@@ -1492,30 +1644,70 @@ def update_room_details(results_data, page_size):
                 columns=[
                     {"name": "宿舍号", "id": "RoomID"},
                     {"name": "类型", "id": "RoomType"},
-                    {"name": "学生ID", "id": "StudentID"},
+                    {"name": "学号", "id": "StudentID"},
                     {"name": "姓名", "id": "Name"},
                     {"name": "性别", "id": "Sex"},
                     {"name": "班级", "id": "Class"},
                     {"name": "MBTI", "id": "MBTI"},
                 ],
                 data=dataframe.to_dict("records"),
-                page_size=page_size, # 使用回调传入的 page_size
+                page_size=page_size or 10, # 使用回调传入的 page_size，提供默认值
                 sort_action="native",
                 filter_action="native",
                 style_table={"overflowX": "auto"},
-                style_cell={"textAlign": "left", "padding": "5px"},
-                style_header={
-                    "backgroundColor": "rgb(230, 230, 230)",
-                    "fontWeight": "bold",
+                style_cell={
+                    "textAlign": "left", 
+                    "padding": "8px",
+                    "fontSize": "14px",
+                    "fontFamily": "SF Pro Display, -apple-system, BlinkMacSystemFont, sans-serif"
                 },
+                style_header={
+                    "backgroundColor": "#f8f9fa",
+                    "fontWeight": "600",
+                    "color": "#1d1d1f",
+                    "border": "1px solid #d2d2d7"
+                },
+                style_data={
+                    "backgroundColor": "#ffffff",
+                    "color": "#1d1d1f",
+                    "border": "1px solid #d2d2d7"
+                },
+                style_data_conditional=[
+                    {
+                        'if': {'row_index': 'odd'},
+                        'backgroundColor': '#f8f9fa'
+                    }
+                ]
             )
 
         all_rooms_table = create_data_table(df, "all-allocation-table")
+        logger.info("room-details回调: 表格创建成功")
 
-        return all_rooms_table
+        return html.Div(
+            [
+                html.H5(
+                    f"分配结果详情 ({len(df)} 名学生)", 
+                    className="mb-3",
+                    style={
+                        "color": "#1d1d1f",
+                        "fontWeight": "600",
+                        "fontSize": "18px"
+                    }
+                ),
+                all_rooms_table
+            ],
+            className="apple-card-body"
+        )
+        
     except Exception as e:
         logger.error(f"渲染房间详情时发生错误: {e}", exc_info=True)
-        return html.Div(f"渲染房间详情时出错: {e}", className="alert alert-danger")
+        return html.Div(
+            [
+                html.I(className="fas fa-exclamation-triangle", style={"margin-right": "8px"}),
+                f"渲染房间详情时出错: {str(e)}"
+            ], 
+            className="apple-alert apple-alert-danger"
+        )
 
 
 @app.callback(
@@ -1626,6 +1818,8 @@ def update_room_compatibility_analysis(selected_room, results_data):
 @app.callback(
     [
         Output("allocation-quality-stats", "figure"),
+        Output("mbti-diversity-chart", "figure"),
+        Output("province-distribution", "figure"),
         Output("feature-correlation", "figure"),
     ],
     Input("allocation-results-data", "data"),
@@ -1633,19 +1827,209 @@ def update_room_compatibility_analysis(selected_room, results_data):
 def update_statistics_charts(results_data):
     try:
         if not results_data:
-            return go.Figure(), go.Figure()
+            empty_figs = [go.Figure() for _ in range(4)]
+            return empty_figs
         
         summary = results_data.get("summary", {})
+        
+        # 1. 分配质量统计 - 删除分配覆盖率和性别平衡度指标
+        quality_metrics = {
+            "平均兼容度": summary.get("mean_compatibility", 0),
+            "最佳宿舍兼容度": summary.get("max_compatibility", 0),
+        }
+        
         quality_fig = go.Figure(go.Bar(
-            x=["适应度得分", "平均兼容度"],
-            y=[summary.get("fitness", 0), summary.get("mean_compatibility", 0)],
+            x=list(quality_metrics.keys()),
+            y=list(quality_metrics.values()),
             marker_color=["#1f77b4", "#2ca02c"],
+            text=[f"{v:.3f}" for v in quality_metrics.values()],
+            textposition='auto'
         ))
-        quality_fig.update_layout(title="分配质量统计", template="plotly_white")
+        quality_fig.update_layout(
+            title="分配质量综合指标",
+            template="plotly_white",
+            yaxis_range=[0, 1],
+            height=400
+        )
 
         if student_data is None:
-            return quality_fig, go.Figure().update_layout(title="特征相关性矩阵 (数据未加载)")
+            empty_figs = [quality_fig] + [go.Figure().update_layout(title="数据未加载") for _ in range(3)]
+            return empty_figs
 
+        allocation_df = pd.DataFrame(results_data.get("allocation", []))
+        
+        # 2. MBTI多样性分析
+        if len(allocation_df) > 0:
+            mbti_diversity_data = []
+            for room_id, group in allocation_df.groupby("RoomID"):
+                room_students = group["StudentID"].tolist()
+                mbtis = []
+                for sid in room_students:
+                    student_row = student_data[student_data["StudentID"] == sid]
+                    if not student_row.empty:
+                        mbti = student_row.iloc[0]["MBTI"]
+                        if pd.notna(mbti) and mbti != "未知":
+                            mbtis.append(mbti)
+                
+                if mbtis:
+                    unique_mbtis = len(set(mbtis))
+                    total_students = len(mbtis)
+                    diversity_score = unique_mbtis / total_students if total_students > 0 else 0
+                    mbti_diversity_data.append({
+                        "宿舍": room_id,
+                        "MBTI类型数": unique_mbtis,
+                        "学生数": total_students,
+                        "多样性": diversity_score
+                    })
+            
+            if mbti_diversity_data:
+                mbti_df = pd.DataFrame(mbti_diversity_data)
+                mbti_fig = px.bar(
+                    mbti_df,
+                    x="宿舍",
+                    y="多样性",
+                    title="宿舍MBTI人格多样性",
+                    color="多样性",
+                    color_continuous_scale="viridis"
+                )
+                mbti_fig.update_layout(
+                    template="plotly_white",
+                    height=400  # 添加明确的高度设置，与其他图表保持一致
+                )
+            else:
+                mbti_fig = go.Figure().update_layout(
+                    title="无MBTI多样性数据",
+                    height=400  # 确保空状态图表也有一致的高度
+                )
+        else:
+            mbti_fig = go.Figure().update_layout(
+                title="无分配数据",
+                height=400  # 确保空状态图表也有一致的高度
+            )
+
+        # 3. 地域分布分析 - 按六大区域分组统计
+        province_counts = student_data["Province"].value_counts()
+        
+        # 定义中国六大区域分组
+        region_mapping = {
+            # 华北地区
+            "北京": "华北", "天津": "华北", "河北": "华北", "山西": "华北", "内蒙古": "华北",
+            "北京市": "华北", "天津市": "华北", "河北省": "华北", "山西省": "华北", "内蒙古自治区": "华北",
+            
+            # 东北地区
+            "辽宁": "东北", "吉林": "东北", "黑龙江": "东北",
+            "辽宁省": "东北", "吉林省": "东北", "黑龙江省": "东北",
+            
+            # 华东地区
+            "上海": "华东", "江苏": "华东", "浙江": "华东", "安徽": "华东", 
+            "福建": "华东", "江西": "华东", "山东": "华东",
+            "上海市": "华东", "江苏省": "华东", "浙江省": "华东", "安徽省": "华东",
+            "福建省": "华东", "江西省": "华东", "山东省": "华东",
+            
+            # 华南地区
+            "河南": "华南", "湖北": "华南", "湖南": "华南", "广东": "华南", 
+            "广西": "华南", "海南": "华南", "台湾": "华南", "香港": "华南", "澳门": "华南",
+            "河南省": "华南", "湖北省": "华南", "湖南省": "华南", "广东省": "华南",
+            "广西壮族自治区": "华南", "海南省": "华南", "台湾省": "华南", 
+            "香港特别行政区": "华南", "澳门特别行政区": "华南",
+            
+            # 西南地区
+            "重庆": "西南", "四川": "西南", "贵州": "西南", "云南": "西南", "西藏": "西南",
+            "重庆市": "西南", "四川省": "西南", "贵州省": "西南", "云南省": "西南", "西藏自治区": "西南",
+            
+            # 西北地区
+            "陕西": "西北", "甘肃": "西北", "青海": "西北", "宁夏": "西北", "新疆": "西北",
+            "陕西省": "西北", "甘肃省": "西北", "青海省": "西北", "宁夏回族自治区": "西北", "新疆维吾尔自治区": "西北"
+        }
+        
+        # 统计各区域学生数量
+        region_counts = {}
+        region_details = {}  # 记录每个区域包含的省份详情
+        
+        for province, count in province_counts.items():
+            region = region_mapping.get(province, "其他")
+            if region not in region_counts:
+                region_counts[region] = 0
+                region_details[region] = []
+            region_counts[region] += count
+            region_details[region].append(f"{province}: {count}人")
+        
+        # 按数量从高到低排序
+        sorted_regions = sorted(region_counts.items(), key=lambda x: x[1], reverse=True)
+        
+        # 定义区域颜色
+        region_colors = {
+            "华北": "#1f77b4",  # 蓝色
+            "东北": "#ff7f0e",  # 橙色
+            "华东": "#2ca02c",  # 绿色
+            "华南": "#d62728",  # 红色
+            "西南": "#9467bd",  # 紫色
+            "西北": "#8c564b",  # 棕色
+            "其他": "#7f7f7f"   # 灰色
+        }
+        
+        # 准备图表数据
+        regions = [item[0] for item in sorted_regions]
+        counts = [item[1] for item in sorted_regions]
+        colors = [region_colors.get(region, "#7f7f7f") for region in regions]
+        
+        # 创建垂直条形图
+        province_fig = go.Figure(data=[
+            go.Bar(
+                x=regions,
+                y=counts,
+                text=counts,
+                texttemplate='%{text}人',
+                textposition='outside',
+                marker=dict(
+                    color=colors,
+                    line=dict(color='rgba(255,255,255,0.8)', width=1)
+                ),
+                hovertemplate='<b>%{x}</b><br>' +
+                             '学生数量: %{y}人<br>' +
+                             '<extra></extra>'
+            )
+        ])
+        
+        # 添加详细悬停信息
+        hover_texts = []
+        for region in regions:
+            details = region_details.get(region, [])
+            hover_text = f"<b>{region}地区</b><br>总计: {region_counts[region]}人<br><br>省份分布:<br>" + "<br>".join(details[:5])
+            if len(details) > 5:
+                hover_text += f"<br>... 等{len(details)}个省份"
+            hover_texts.append(hover_text)
+        
+        province_fig.update_traces(
+            hovertemplate='%{customdata}<extra></extra>',
+            customdata=hover_texts
+        )
+        
+        # 优化图表样式
+        province_fig.update_layout(
+            template="plotly_white",
+            title=dict(
+                text="学生地域分布（按六大区域统计）",
+                x=0.5,
+                font=dict(size=16, color='var(--apple-text-primary)')
+            ),
+            xaxis=dict(
+                title="地区",
+                tickangle=0,
+                showgrid=False
+            ),
+            yaxis=dict(
+                title="学生数量",
+                showgrid=True,
+                gridcolor='rgba(128,128,128,0.2)'
+            ),
+            height=450,
+            margin=dict(l=60, r=40, t=60, b=80),
+            showlegend=False,
+            plot_bgcolor='rgba(0,0,0,0)'
+        )
+
+        # 4. 特征相关性分析
         # 修复: 将numpy数组转换为带有特征名称的DataFrame以计算相关性
         processed_df = pd.DataFrame(
             preprocessor.transform(student_data),
@@ -1655,13 +2039,17 @@ def update_statistics_charts(results_data):
         correlation_fig = px.imshow(
             correlation_matrix,
             color_continuous_scale="RdBu_r",
-            title="特征相关性矩阵",
+            title="学生特征相关性矩阵",
         )
-        return quality_fig, correlation_fig
+        correlation_fig.update_layout(template="plotly_white")
+
+        return quality_fig, mbti_fig, province_fig, correlation_fig
+        
     except Exception as e:
         logger.error(f"渲染统计图表时发生错误: {e}", exc_info=True)
         error_fig = go.Figure().update_layout(title=f"渲染图表时出错: {e}")
-        return error_fig, error_fig
+        error_figs = [error_fig for _ in range(4)]
+        return error_figs
 
 
 @app.callback(
@@ -1865,7 +2253,7 @@ def update_overview_charts(n_intervals, system_status):
         class_counts, 
         x="Class", 
         y="Count", 
-        title="学生班级分布 (按专业分色)",
+        title="学生班级分布",
         color="Major",
         color_discrete_map=major_colors,
         labels={"Major": "专业", "Class": "班级", "Count": "人数"}
@@ -1883,7 +2271,7 @@ def update_overview_charts(n_intervals, system_status):
         mbti_counts, 
         x="MBTI", 
         y="Count", 
-        title="MBTI人格分布 (完整数据)",
+        title="MBTI人格分布",
         color="MBTI", 
         color_discrete_sequence=px.colors.qualitative.Set3
     )
