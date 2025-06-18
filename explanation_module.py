@@ -7,6 +7,7 @@ import logging
 import warnings
 import random
 from typing import Any, Dict, List, Optional, Tuple
+from itertools import combinations
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -99,7 +100,15 @@ class AllocationExplainer:
                 room_scores[room_id] = np.nan # 少于2人无法计算兼容度
                 continue
             
-            student_indices = students_in_room["StudentID"].tolist()
+            # 获取真实的StudentID，但需要转换为DataFrame索引
+            student_real_ids = students_in_room["StudentID"].tolist()
+            # 将真实StudentID转换为DataFrame的数字索引
+            student_indices = []
+            for real_id in student_real_ids:
+                # 在DataFrame中查找对应的索引位置
+                index_pos = self.student_df[self.student_df["StudentID"] == real_id].index
+                if not index_pos.empty:
+                    student_indices.append(index_pos[0])
             
             # 从模型获取兼容性分数
             pair_scores = self.compatibility_model.predict_from_ids(
@@ -111,18 +120,31 @@ class AllocationExplainer:
             room_scores[room_id] = np.mean(pair_scores) if pair_scores else np.nan
 
         metrics["mean_compatibility"] = np.mean(all_pairs_compat) if all_pairs_compat else 0
+        metrics["compatibilities"] = all_pairs_compat  # 添加所有兼容度分数列表
 
         # 2. MBTI 轮廓系数
         try:
             # 仅对优化宿舍进行计算
             optimized_df = self.allocation_df[self.allocation_df['RoomType'].str.contains('人间')]
             if len(optimized_df['RoomID'].unique()) > 1:
+                # 获取真实StudentID并转换为DataFrame索引
+                real_student_ids = optimized_df['StudentID'].tolist()
+                # 根据真实StudentID找到对应的DataFrame行
+                valid_indices = []
+                for real_id in real_student_ids:
+                    matching_rows = self.student_df[self.student_df["StudentID"] == real_id]
+                    if not matching_rows.empty:
+                        valid_indices.append(matching_rows.index[0])
+                
                 # 提取MBTI特征用于聚类评估
-                mbti_features = self.preprocessor.transform(
-                    self.student_df.loc[optimized_df['StudentID']]
-                )
-                labels = optimized_df['RoomID'].values
-                metrics["mbti_silhouette"] = silhouette_score(mbti_features, labels)
+                if valid_indices:
+                    mbti_features = self.preprocessor.transform(
+                        self.student_df.iloc[valid_indices]
+                    )
+                    labels = optimized_df['RoomID'].values
+                    metrics["mbti_silhouette"] = silhouette_score(mbti_features, labels)
+                else:
+                    metrics["mbti_silhouette"] = 0
             else:
                 metrics["mbti_silhouette"] = 0
         except Exception as e:
@@ -145,39 +167,40 @@ class AllocationExplainer:
             return pd.DataFrame() # 学生太少无法计算
 
         X_explain = []
-        for _ in range(num_pairs):
-            s1_id, s2_id = random.sample(all_student_ids, 2)
-            # 使用模型的静态方法来创建特征向量
+        sample_indices = random.sample(all_student_ids, min(num_pairs * 2, len(all_student_ids)))
+        
+        for s1_id, s2_id in combinations(sample_indices, 2):
+            if len(X_explain) >= num_pairs:
+                break
             feature_vector = CompatibilityModel.create_pair_feature_vector(
                 self.processed_features, s1_id, s2_id
             )
             X_explain.append(feature_vector)
         
+        if not X_explain:
+            logger.warning("未能创建任何用于解释的学生对。")
+            return pd.DataFrame()
+
         X_explain = np.array(X_explain)
         
-        # 使用部分数据作为背景数据以提高效率
-        background_data = shap.sample(X_explain, 50)
-
-        # 2. 计算SHAP值
-        explainer = shap.Explainer(self.compatibility_model.predict, background_data)
-        shap_values = explainer(X_explain)
+        # 2. 使用在__init__中创建的、正确的TreeExplainer计算SHAP值
+        shap_values_for_pairs = self.explainer.shap_values(X_explain)
 
         # 3. 创建并返回DataFrame
-        # 修正：从模型实例获取正确的特征名称列表
         feature_names = self.compatibility_model.feature_names 
         if not feature_names:
             logger.warning("在模型中未找到特征名称，无法生成特征重要性报告。")
             return pd.DataFrame()
             
         # 确保shap_values.values和feature_names长度一致
-        if shap_values.values.shape[1] != len(feature_names):
-            logger.error(f"SHAP值的维度 ({shap_values.values.shape[1]}) 与特征名称的数量 ({len(feature_names)}) 不匹配！")
+        if shap_values_for_pairs.shape[1] != len(feature_names):
+            logger.error(f"SHAP值的维度 ({shap_values_for_pairs.shape[1]}) 与特征名称的数量 ({len(feature_names)}) 不匹配！")
             return pd.DataFrame()
 
         importance_df = pd.DataFrame(
             {
                 "feature": feature_names,
-                "importance": np.abs(shap_values.values).mean(axis=0),
+                "importance": np.abs(shap_values_for_pairs).mean(axis=0),
             }
         ).sort_values("importance", ascending=False)
 
@@ -195,10 +218,26 @@ class AllocationExplainer:
             fig.update_layout(title=f"宿舍 {room_id}: 人数不足，无法分析")
             return fig
 
+        # 将真实StudentID转换为数字索引
+        room_indices = []
+        for student_id in room_students:
+            try:
+                # 在student_df中找到对应StudentID的行索引
+                idx = self.student_df[self.student_df['StudentID'] == student_id].index[0]
+                room_indices.append(idx)
+            except IndexError:
+                logger.warning(f"在数据中找不到StudentID {student_id}")
+                continue
+
+        if len(room_indices) < 2:
+            fig = go.Figure()
+            fig.update_layout(title=f"宿舍 {room_id}: 有效学生不足，无法分析")
+            return fig
+
         room_pairs = [
-            (room_students[i], room_students[j])
-            for i in range(len(room_students))
-            for j in range(i + 1, len(room_students))
+            (room_indices[i], room_indices[j])
+            for i in range(len(room_indices))
+            for j in range(i + 1, len(room_indices))
         ]
 
         # 准备数据
@@ -249,10 +288,10 @@ class AllocationExplainer:
     def get_compatibility_distribution_plot(self) -> go.Figure:
         """创建宿舍兼容性得分的分布图（直方图和箱线图）"""
         metrics = self.get_allocation_metrics()
-        compatibilities = metrics["compatibilities"]
+        compatibilities = metrics.get("compatibilities", [])
 
         if not compatibilities:
-            return go.Figure().update_layout(title="无数据显示")
+            return go.Figure().update_layout(title="无兼容性数据显示")
 
         fig = make_subplots(rows=1, cols=2, subplot_titles=("分布直方图", "箱线图"))
 
@@ -283,7 +322,20 @@ class AllocationExplainer:
             if len(group) < 2:
                 continue
 
-            room_features = self.processed_features[group["StudentID"].tolist()]
+            # 将真实StudentID转换为数字索引
+            room_indices = []
+            for student_id in group["StudentID"].tolist():
+                try:
+                    idx = self.student_df[self.student_df['StudentID'] == student_id].index[0]
+                    room_indices.append(idx)
+                except IndexError:
+                    logger.warning(f"在数据中找不到StudentID {student_id}")
+                    continue
+            
+            if len(room_indices) < 2:
+                continue
+
+            room_features = self.processed_features[room_indices]
 
             # 计算每列特征的平均距离（不相似度）
             for i, feat_name in enumerate(self.feature_names):

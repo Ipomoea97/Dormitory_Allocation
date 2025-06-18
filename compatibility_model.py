@@ -10,12 +10,17 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 import logging
+from typing import TYPE_CHECKING
 
 # 尝试导入cupy，如果失败则将其设为None
 try:
     import cupy as cp
 except ImportError:
     cp = None
+
+# 使用TYPE_CHECKING来避免循环导入，但仍然提供类型提示
+if TYPE_CHECKING:
+    from data_preprocessing import DataPreprocessor
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -59,8 +64,13 @@ class CompatibilityModel:
             "random_state": 42,
             "n_jobs": -1,
         }
+        
+        # 修复GPU/CPU不匹配警告：即使有GPU也使用CPU进行训练以避免设备不匹配
+        # 这样可以避免数据在不同设备间转移的开销和警告
         if use_gpu:
-            params["device"] = "cuda"
+            # 注释掉GPU设置，统一使用CPU
+            # params["device"] = "cuda"
+            logger.info("为避免设备不匹配警告，统一使用CPU进行模型训练。")
             
         return xgb.XGBRegressor(**params)
 
@@ -322,20 +332,21 @@ class CompatibilityModel:
     def predict_from_ids(self, student_ids: List[int], student_df: pd.DataFrame, preprocessor: 'DataPreprocessor') -> List[float]:
         """
         根据学生ID列表，预测所有学生对的兼容性得分。
+        注意：student_ids 现在是DataFrame的数字索引，不是StudentID列的值
         """
         if len(student_ids) < 2:
             return []
 
         processed_features = preprocessor.transform(student_df)
-        student_id_to_pos = {student_id: i for i, student_id in enumerate(student_df.index)}
+        # 现在student_ids直接就是DataFrame的数字索引
         
         student_pairs = list(combinations(student_ids, 2))
         
         feature_vectors = np.array([
             CompatibilityModel.create_pair_feature_vector(
                 processed_features,
-                student_id_to_pos[s1],
-                student_id_to_pos[s2]
+                s1,  # 直接使用数字索引
+                s2   # 直接使用数字索引
             )
             for s1, s2 in student_pairs
         ])
