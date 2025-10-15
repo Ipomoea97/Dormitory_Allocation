@@ -1,8 +1,8 @@
 # 基于多维特征驱动AI模型的新生宿舍分配系统
 
-![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)
+![Python](https://img.shields.io/badge/Python-3.12-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
-![Status](https://img.shields.io/badge/Status-v1.0.0-brightgreen.svg)
+![Status](https://img.shields.io/badge/Status-v1.2.0-brightgreen.svg)
 
 ## 🎯 项目概述
 
