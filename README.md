@@ -31,7 +31,7 @@
 
 - **XGBoost预测模型**：高精度兼容性评分
 - **遗传算法优化**：全局最优解搜索
-- **SHAP可解释AI**：决策过程透明化
+- **可解释AI**：决策过程透明化
 - **实时Web界面**：可视化监控和交互
 
 ### 📈 性能指标
@@ -39,26 +39,6 @@
 - **处理规模**：支持300+学生同时分配
 - **兼容性准确率**：>85%
 - **约束满足率**：100%（性别分离等硬约束）
-- **优化效率**：100代优化约2-3分钟
-
-## 🏗️ 系统架构
-
-```
-宿舍分配系统
-├── 📁 数据层
-│   ├── data_preprocessing.py      # 数据预处理模块
-│   └── Data.xlsx                  # 学生原始数据
-├── 🧠 模型层
-│   ├── compatibility_model.py     # XGBoost兼容性模型
-│   └── allocation_optimizer.py    # 遗传算法优化器
-├── 🔍 分析层
-│   └── explanation_module.py      # SHAP解释性分析
-├── 🌐 应用层
-│   ├── dashboard_app.py           # Dash Web界面
-│   └── init_system.py            # 系统初始化
-└── 🧪 测试层
-    └── test_system.py            # 系统测试
-```
 
 ## 🚀 快速开始
 
@@ -138,7 +118,7 @@ python dashboard_app.py
 
 ### 4. 🔍 决策分析
 
-- SHAP特征重要性分析
+- 特征重要性分析
 - 单个宿舍匹配解释
 - 决策因子可视化
 - 模型透明度报告
@@ -149,57 +129,6 @@ python dashboard_app.py
 - 特征相关性分析
 - 系统性能指标
 - 优化效果评估
-
-## ⚙️ 配置参数
-
-### 遗传算法参数
-
-```python
-AllocationConfig(
-    population_size=100,    # 种群大小
-    generations=200,        # 迭代代数  
-    mutation_rate=0.1,      # 变异率
-    crossover_rate=0.8,     # 交叉率
-    elite_size=20,          # 精英个体保留数
-    tournament_size=5,      # 锦标赛选择大小
-)
-```
-
-### 兼容性评分权重
-
-```python
-兼容性计算权重分配：
-├── 作息时间一致性：40%
-├── 兴趣爱好重叠度：25%  
-├── MBTI性格互补性：20%
-├── 学业水平相似性：10%
-└── 地域文化多样性：5%
-```
-
-### 模型参数
-
-```python
-XGBoost参数配置：
-├── 目标函数：reg:squarederror
-├── 树的最大深度：5
-├── 学习率：0.05
-├── 估计器数量：200
-├── 子采样比例：0.8
-└── 特征子采样：0.8
-```
-
-## 🧪 测试验证
-
-```bash
-# 运行系统测试
-python test_system.py
-
-# 数据预处理测试
-python -c "from data_preprocessing import test_preprocessing; test_preprocessing()"
-
-# 兼容性模型测试  
-python -c "from compatibility_model import test_compatibility_model; test_compatibility_model()"
-```
 
 ## 📄 输出文件
 
@@ -239,32 +168,6 @@ python -c "from compatibility_model import test_compatibility_model; test_compat
 2. **特征贡献度**：计算每个特征对预测结果的边际贡献
 3. **可视化展示**：瀑布图和条形图展示解释结果
 4. **决策透明化**：将"黑箱"模型变为"白箱"可解释模型
-
-## 💡 实施案例
-
-### 食品学院2024级新生分配
-
-- **学生规模**：299名新生（男121名，女178名）
-- **班级分布**：10个行政班
-- **地域分布**：来自全国21个省（自治区、直辖市）
-- **MBTI分布**：I型161名(54%)，E型138名(46%)
-- **分配结果**：平均兼容性得分0.78，满意度调查>90%
-
-## 📋 版本历史
-
-### v1.0.0 (2024-12)
-
-- ✅ 核心功能实现
-- ✅ Web界面完成
-- ✅ SHAP解释性分析
-- ✅ 完整文档编写
-
-### 计划功能 (v1.1.0)
-
-- 🔄 动态调整功能
-- 🔄 批量导入优化
-- 🔄 多语言支持
-- 🔄 移动端适配
 
 ## 🤝 贡献指南
 
@@ -316,7 +219,7 @@ python -c "from compatibility_model import test_compatibility_model; test_compat
 | ---------- | ------------ | -------- |
 | 匹配精度   | 随机         | >85%     |
 | 处理效率   | 人工         | 自动化   |
-| 可解释性   | 无           | SHAP分析 |
+| 可解释性   | 无           | 因子分析 |
 | 个性化程度 | 低           | 高       |
 | 满意度     | 60-70%       | >90%     |
 
@@ -324,37 +227,11 @@ python -c "from compatibility_model import test_compatibility_model; test_compat
 
 1. **多维特征融合**：首次将MBTI、作息、兴趣等软性特征用于宿舍分配
 2. **AI+优化算法**：XGBoost建模+遗传算法优化的技术组合
-3. **可解释AI**：SHAP解释提供决策透明度
+3. **可解释AI**：因子解释提供决策透明度
 4. **人机协同**：保留学生选择权的智能推荐系统
-
-## 📚 参考文献
-
-1. Chen, T., & Guestrin, C. (2016). XGBoost: A Scalable Tree Boosting System.
-2. Lundberg, S. M., & Lee, S. I. (2017). A Unified Approach to Interpreting Model Predictions.
-3. Goldberg, D. E. (1989). Genetic Algorithms in Search, Optimization and Machine Learning.
-4. Myers, I. B., & Myers, P. B. (1995). Gifts Differing: Understanding Personality Type.
-
-## 📞 技术支持
-
-- **GitHub Issues**：技术问题和Bug报告
-- **项目维护者**：Ipomoea97
-- **更新频率**：持续维护和功能迭代
 
 ## 📜 许可证
 
 本项目采用MIT许可证 - 详情请参阅 [LICENSE](LICENSE) 文件。
-
-## 🙏 致谢
-
-- 感谢华南农业大学食品学院提供的数据支持
-- 感谢开源社区的优秀工具和框架
-- 感谢所有参与测试和反馈的同学们
-
----
-
-- **版本**: 1.1.0
-- **状态**: 稳定
-
----
 
 **让AI让宿舍分配更科学，让大学生活更美好！** 🏠✨
